@@ -2,6 +2,8 @@ import os
 import shutil
 import logging
 from pathlib import Path
+from urllib.parse import urlsplit
+import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from sqlalchemy.orm import Session
@@ -147,8 +149,16 @@ async def import_youtube_project(
     guides the user to upload the original video file.
     """
     url = payload.youtube_url.strip()
-    if not ("youtube.com" in url or "youtu.be" in url):
-        raise HTTPException(status_code=400, detail="Invalid YouTube URL format.")
+    parsed_url = urlsplit(url)
+    allowed_hosts = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"}
+    if (
+        parsed_url.scheme != "https"
+        or parsed_url.hostname not in allowed_hosts
+        or parsed_url.username is not None
+        or parsed_url.password is not None
+        or parsed_url.port not in (None, 443)
+    ):
+        raise HTTPException(status_code=400, detail="Only valid HTTPS YouTube video URLs are supported.")
 
     # 1. Inspect YouTube URL using authorized oEmbed / metadata inspection
     import urllib.request
@@ -166,7 +176,7 @@ async def import_youtube_project(
 
     # 2. Check if authorized media stream is accessible via yt-dlp
     import subprocess
-    target_file = UPLOAD_DIR / f"yt_import_{payload.project_name[:20].replace(' ', '_')}.mp4"
+    target_file = UPLOAD_DIR / f"yt_import_{uuid.uuid4().hex}.mp4"
     
     cmd = [
         "yt-dlp",
