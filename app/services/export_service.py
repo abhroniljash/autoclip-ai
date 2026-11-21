@@ -9,6 +9,7 @@ from app.models import Project, Clip, ExportJob
 from app.config import EXPORTS_DIR, SUBTITLES_DIR
 from app.services.video_service import render_clip
 from app.services.subtitle_service import generate_srt_subtitles
+from app.services.aws_storage import download_file
 
 logger = logging.getLogger("autoclip.export_service")
 
@@ -51,13 +52,21 @@ def build_project_zip_archive(
     with zipfile.ZipFile(str(zip_path), "w", zipfile.ZIP_DEFLATED) as zip_f:
         for idx, clip in enumerate(selected_clips):
             # 1. Ensure clip is rendered
-            clip_file = Path(clip.output_file_path) if clip.output_file_path else None
+            clip_file = Path(clip.output_file_path) if clip.output_file_path and not clip.output_file_path.startswith("s3://") else None
+            if clip.output_file_path and clip.output_file_path.startswith("s3://"):
+                local_media = EXPORTS_DIR / f"{clip.id}_source.mp4"
+                download_file(clip.output_file_path, str(local_media))
+                clip_file = local_media
             if not clip_file or not clip_file.exists():
                 logger.info("Rendering clip %s before export...", clip.id)
                 new_clip_path = EXPORTS_DIR / f"{clip.id}_final.mp4"
                 
                 # Check subtitle file
                 sub_path = clip.subtitle_file_path
+                if sub_path and sub_path.startswith("s3://"):
+                    local_subtitle = SUBTITLES_DIR / f"{clip.id}_worker.ass"
+                    download_file(sub_path, str(local_subtitle))
+                    sub_path = str(local_subtitle)
                 render_clip(
                     input_video=project.source_reference,
                     output_clip_path=str(new_clip_path),
