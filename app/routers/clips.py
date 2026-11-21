@@ -67,7 +67,7 @@ def get_clip(clip_id: str, user: User = Depends(get_current_user), db: Session =
 @router.patch("/{clip_id}", response_model=ClipResponse)
 def update_clip_settings(clip_id: str, payload: ClipUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Update clip parameters (trim start/end, crop mode, subtitle style, audio settings)."""
-    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    clip = db.query(Clip).join(Project).filter(Clip.id == clip_id, Project.user_id == user.id).first()
     if not clip:
         raise HTTPException(status_code=404, detail="Clip not found")
 
