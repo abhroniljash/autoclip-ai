@@ -45,6 +45,11 @@ async def run_project_pipeline(project_id: str):
 
         logger.info("Starting processing pipeline for Project %s ('%s')", project_id, project.project_name)
         
+        project.error_message = None
+        project.processing_status = "pending"
+        project.progress = 0
+        db.commit()
+
         # Step 1: Probe Video
         project.processing_status = "extracting_audio"
         project.progress = 10
