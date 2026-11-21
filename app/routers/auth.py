@@ -4,7 +4,7 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
-from app.auth import create_access_token, get_current_user, hash_password, verify_password
+from app.auth import create_access_token, get_current_user, hash_password, verify_password, _require_secret
 from app.database import get_db
 from app.models import User
 
@@ -37,6 +37,7 @@ class TokenResponse(BaseModel):
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
 def register(payload: RegisterRequest, response: Response, db: Session = Depends(get_db)):
+    _require_secret()
     email = str(payload.email).strip().lower()
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=409, detail="An account with this email already exists.")
@@ -64,6 +65,7 @@ def register(payload: RegisterRequest, response: Response, db: Session = Depends
 
 @router.post("/login", response_model=TokenResponse)
 def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
+    _require_secret()
     email = str(payload.email).strip().lower()
     user = db.query(User).filter(User.email == email).first()
     if user is None or not user.password_hash or not verify_password(payload.password, user.password_hash):
