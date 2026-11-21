@@ -448,7 +448,7 @@ function renderProjectCard(project) {
             <!-- Thumbnail / Preview Area -->
             <div class="aspect-video bg-slate-900 relative overflow-hidden cursor-pointer" onclick="window.location.hash='${targetUrl}'">
                 ${project.thumbnail_path 
-                    ? `<img src="/storage/uploads/${project.thumbnail_path.split('\\').pop().split('/').pop()}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="Thumbnail">`
+                    ? `<img src="/api/projects/${project.id}/thumbnail" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="Thumbnail">`
                     : `<div class="w-full h-full flex items-center justify-center text-slate-600"><i data-lucide="video" class="w-8 h-8"></i></div>`
                 }
                 <div class="absolute top-3 left-3">${statusBadge}</div>
@@ -1060,7 +1060,7 @@ async function renderEditorPage(container, projectId, clipId) {
     state.currentClip = clip;
 
     const videoSrc = clip.output_file_path 
-        ? `/storage/clips/${clip.output_file_path.split('\\').pop().split('/').pop()}`
+        ? `/api/clips/${clip.id}/media`
         : "";
 
     container.innerHTML = `
@@ -1281,7 +1281,7 @@ async function renderEditorPage(container, projectId, clipId) {
             
             // Reload player source with cache-buster
             const player = document.getElementById("editor-video-player");
-            const newSrc = `/storage/clips/${updated.output_file_path.split('\\').pop().split('/').pop()}?t=${Date.now()}`;
+            const newSrc = `/api/clips/${updated.id}/media?t=${Date.now()}`;
             player.src = newSrc;
             player.load();
             player.play().catch(() => {});
@@ -1404,7 +1404,7 @@ async function renderExportPage(container, projectId) {
 function renderExportClipItem(clip, idx) {
     const meta = clip.metadata_info || {};
     const videoSrc = clip.output_file_path 
-        ? `/storage/clips/${clip.output_file_path.split('\\').pop().split('/').pop()}`
+        ? `/api/clips/${clip.id}/media`
         : "";
 
     return `
