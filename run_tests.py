@@ -52,6 +52,17 @@ from tests.test_api_direct import test_api_handlers_direct
 print("\n--- 3. FastAPI Service Handlers & Database Persistence ---")
 run_test("FastAPI Endpoints, Subtitle Presets & Dashboard Stats", test_api_handlers_direct)
 
+from tests.test_security import (
+    test_accepts_mp4_signature,
+    test_accepts_webm_and_matroska_signature,
+    test_rejects_unknown_or_short_signature,
+)
+
+print("\n--- 4. Upload Security Checks ---")
+run_test("Accept supported MP4 container signature", test_accepts_mp4_signature)
+run_test("Accept WebM/Matroska container signature", test_accepts_webm_and_matroska_signature)
+run_test("Reject unknown and truncated container signatures", test_rejects_unknown_or_short_signature)
+
 print("\n==================================================")
 print(f"  RESULTS: {passed} PASSED, {failed} FAILED")
 print("==================================================")
