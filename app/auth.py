@@ -6,7 +6,7 @@ from datetime import datetime, timedelta, timezone
 from typing import Generator
 
 import jwt
-from fastapi import Depends, HTTPException, status
+from fastapi import Depends, HTTPException, Request, status
 from fastapi.security import HTTPAuthorizationCredentials, HTTPBearer
 from pwdlib import PasswordHash
 from sqlalchemy.orm import Session
@@ -53,6 +53,7 @@ def create_access_token(user: User) -> str:
 
 
 def get_current_user(
+    request: Request,
     credentials: HTTPAuthorizationCredentials | None = Depends(bearer_scheme),
     db: Session = Depends(get_db),
 ) -> User:
@@ -61,11 +62,12 @@ def get_current_user(
         detail="Authentication required.",
         headers={"WWW-Authenticate": "Bearer"},
     )
-    if credentials is None or credentials.scheme.lower() != "bearer":
+    token = credentials.credentials if credentials is not None and credentials.scheme.lower() == "bearer" else request.cookies.get("autoclip_access_token")
+    if not token:
         raise unauthorized
     try:
         payload = jwt.decode(
-            credentials.credentials,
+            token,
             _require_secret(),
             algorithms=[JWT_ALGORITHM],
             issuer="autoclip-ai",
