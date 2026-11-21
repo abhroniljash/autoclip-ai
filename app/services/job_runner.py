@@ -25,5 +25,6 @@ def run_export_job(export_job_id: str) -> None:
             job.export_status = "failed"
             job.error_message = "Export processing failed. Please retry."
             db.commit()
+        raise
     finally:
         db.close()
