@@ -106,7 +106,7 @@ export const api = {
     async updateClip(clipId, data) {
         const res = await fetch(`${API_BASE}/clips/${clipId}`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify(data)
         });
         if (!res.ok) throw new Error("Failed to update clip");
