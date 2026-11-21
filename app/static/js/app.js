@@ -447,7 +447,7 @@ function renderProjectCard(project) {
         <div class="group rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col">
             <!-- Thumbnail / Preview Area -->
             <div class="aspect-video bg-slate-900 relative overflow-hidden cursor-pointer" onclick="window.location.hash='${targetUrl}'">
-                ${project.thumbnail_path 
+                ${project.video_duration > 0
                     ? `<img src="/api/projects/${project.id}/thumbnail" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="Thumbnail">`
                     : `<div class="w-full h-full flex items-center justify-center text-slate-600"><i data-lucide="video" class="w-8 h-8"></i></div>`
                 }
@@ -1059,7 +1059,7 @@ async function renderEditorPage(container, projectId, clipId) {
     const clip = await api.getClip(clipId);
     state.currentClip = clip;
 
-    const videoSrc = clip.output_file_path 
+    const videoSrc = clip.clip_status === "ready"
         ? `/api/clips/${clip.id}/media`
         : "";
 
@@ -1403,7 +1403,7 @@ async function renderExportPage(container, projectId) {
 
 function renderExportClipItem(clip, idx) {
     const meta = clip.metadata_info || {};
-    const videoSrc = clip.output_file_path 
+    const videoSrc = clip.clip_status === "ready"
         ? `/api/clips/${clip.id}/media`
         : "";
 
