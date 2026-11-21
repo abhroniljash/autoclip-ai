@@ -40,7 +40,7 @@ function initTheme() {
 }
 
 function updateAuthControls() {
-    const signedIn = Boolean(sessionStorage.getItem("autoclip_access_token"));
+    const signedIn = Boolean(sessionStorage.getItem("autoclip_authenticated"));
     document.getElementById("sign-in-link")?.classList.toggle("hidden", signedIn);
     document.getElementById("sign-out-button")?.classList.toggle("hidden", !signedIn);
 }
