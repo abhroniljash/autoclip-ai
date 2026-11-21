@@ -1,5 +1,6 @@
 """Registration and login endpoints."""
-from fastapi import APIRouter, Depends, HTTPException, status
+import os
+from fastapi import APIRouter, Depends, HTTPException, Response, status
 from pydantic import BaseModel, EmailStr, Field
 from sqlalchemy.orm import Session
 
@@ -35,7 +36,7 @@ class TokenResponse(BaseModel):
 
 
 @router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
-def register(payload: RegisterRequest, db: Session = Depends(get_db)):
+def register(payload: RegisterRequest, response: Response, db: Session = Depends(get_db)):
     email = str(payload.email).strip().lower()
     if db.query(User).filter(User.email == email).first():
         raise HTTPException(status_code=409, detail="An account with this email already exists.")
@@ -48,15 +49,21 @@ def register(payload: RegisterRequest, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(user)
     from app.auth import ACCESS_TOKEN_MINUTES
+    access_token = create_access_token(user)
+    response.set_cookie(
+        key="autoclip_access_token", value=access_token, httponly=True,
+        secure=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
+        samesite="strict", max_age=ACCESS_TOKEN_MINUTES * 60, path="/",
+    )
     return TokenResponse(
-        access_token=create_access_token(user),
+        access_token=access_token,
         expires_in=ACCESS_TOKEN_MINUTES * 60,
         user=UserResponse(id=user.id, name=user.name, email=user.email),
     )
 
 
 @router.post("/login", response_model=TokenResponse)
-def login(payload: LoginRequest, db: Session = Depends(get_db)):
+def login(payload: LoginRequest, response: Response, db: Session = Depends(get_db)):
     email = str(payload.email).strip().lower()
     user = db.query(User).filter(User.email == email).first()
     if user is None or not user.password_hash or not verify_password(payload.password, user.password_hash):
