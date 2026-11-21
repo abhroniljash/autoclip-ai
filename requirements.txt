@@ -1,0 +1,38 @@
+# ==============================================================================
+# AutoClip AI – Core Application Dependencies (Python 3.13 Compatible)
+# ==============================================================================
+
+# Web Framework & Async Server
+fastapi>=0.115.0
+uvicorn[standard]>=0.30.0
+python-multipart>=0.0.12
+
+# Database & Persistence (SQLAlchemy ORM with SQLite/Postgres)
+SQLAlchemy>=2.0.30
+
+# Data Validation & Modeling
+pydantic>=2.8.0
+
+# HTTP Client (Gemini Multimodal API calls & async fetch)
+httpx>=0.27.0
+
+# Computer Vision & Numerical Array Processing (Active Speaker & Face Tracking)
+numpy>=2.1.0
+opencv-python>=4.10.0
+
+# Video Ingestion & Stream Inspection
+yt-dlp>=2024.10.0
+
+# ==============================================================================
+# Optional AI & Speech Model Integrations
+# (AutoClip AI works out-of-the-box via native REST & acoustic segmentation;
+#  install these only if running specialized local inference or official SDKs)
+# ==============================================================================
+# Google Gemini SDK:
+# google-genai>=0.1.0
+#
+# OpenAI Whisper Cloud API:
+# openai>=1.50.0
+#
+# Local High-Performance Speech Recognition:
+# faster-whisper>=1.0.0

@@ -7,9 +7,9 @@
 
 ## 1. Overview
 
-**AutoClip AI** is a video repurposing platform designed to transform long-form content (podcasts, interviews, webinars, tutorials, YouTube videos) into multiple engaging, vertical (9:16) short-form videos ready for TikTok, Instagram Reels, and YouTube Shorts.
+**AutoClip AI** is an intelligent video repurposing platform designed to transform long-form content (podcasts, interviews, webinars, tutorials, YouTube videos) into multiple engaging, vertical (9:16) short-form videos ready for TikTok, Instagram Reels, and YouTube Shorts.
 
-Instead of basic linear trimming, AutoClip AI analyzes video narrative structure, evaluates virality potential across 8 weighted factors, intelligently reframes landscape footage around active speakers, generates animated karaoke-style subtitles, and generates a social media kit (titles, captions, hashtags, hooks) for each clip.
+Instead of basic linear trimming, AutoClip AI analyzes video narrative structure, evaluates virality potential across 8 weighted factors, intelligently reframes landscape footage around active speakers, generates animated karaoke-style subtitles, and generates a complete social media kit (titles, captions, hashtags, hooks) for each clip.
 
 ---
 
@@ -83,43 +83,124 @@ AutoClip AI provides a responsive, light-first modern web interface with optiona
 
 ---
 
-## 5. Technology Stack
+## 5. Technology Stack & Dependencies
 
-- **Backend**: Python 3.13, FastAPI, Uvicorn, SQLAlchemy, SQLite
-- **Video & Audio**: FFmpeg 8.0.1 64-bit (with `libass`, `libx264`, `loudnorm`), OpenCV 5.0 (facial saliency and motion tracking)
-- **AI Intelligence**: Google Gemini API (`gemini-2.5-flash`), acoustic speech chunking, and heuristic evaluation engine
-- **Frontend**: Single-Page Application (HTML5, Tailwind CSS, Lucide Icons, Vanilla ES Modules)
-- **Subtitles**: Advanced SubStation Alpha (`.ass`) with karaoke keyword highlights and standard `.srt` generator
+### Core Python Dependencies (Python 3.13 Compatible)
+All dependencies are enumerated in `requirements.txt`:
+- **`fastapi>=0.115.0`**: Modern, asynchronous web API framework.
+- **`uvicorn[standard]>=0.30.0`**: High-performance ASGI web server.
+- **`python-multipart>=0.0.12`**: Multipart form data & file streaming support for video uploads.
+- **`SQLAlchemy>=2.0.30`**: ORM and database engine (SQLite by default, PostgreSQL ready).
+- **`pydantic>=2.8.0`**: Type validation and structured schemas.
+- **`httpx>=0.27.0`**: Async HTTP client for multimodal AI API communication.
+- **`numpy>=2.1.0`**: Numerical computation and audio/frame array operations.
+- **`opencv-python>=4.10.0`**: Computer vision for facial saliency, motion tracking, and 9:16 reframing.
+- **`yt-dlp>=2024.10.0`**: Authorized video stream analysis and metadata retrieval.
+
+### Optional AI Integrations
+AutoClip AI works out-of-the-box with its built-in acoustic speech chunker and heuristic scoring engine. If you wish to extend it with additional external models:
+- **`google-genai>=0.1.0`**: Google Gemini API official Python SDK (AutoClip AI already natively supports direct REST calls to Gemini 2.5 Flash via `httpx`).
+- **`openai>=1.50.0`**: Optional cloud Whisper speech-to-text API fallback.
+- **`faster-whisper>=1.0.0`**: Optional local high-speed speech recognition using CTranslate2.
+
+### System Requirements: FFmpeg & FFprobe
+AutoClip AI relies on **FFmpeg** and **FFprobe** (version 6.0+ or 8.0+) compiled with `libass` (for subtitle burning) and `libx264` (for H.264 video encoding).
+
+#### Windows Installation Methods:
+- **Method 1: Using Windows Package Manager (Winget - Recommended)**
+  ```powershell
+  winget install Gyan.FFmpeg
+  ```
+- **Method 2: Using Chocolatey**
+  ```powershell
+  choco install ffmpeg
+  ```
+- **Method 3: Manual Download**
+  1. Download the full release build from [gyan.dev/ffmpeg/builds](https://www.gyan.dev/ffmpeg/builds/).
+  2. Extract to `C:\ffmpeg`.
+  3. Add `C:\ffmpeg\bin` to your Windows System `PATH`.
+
+#### Auto-Discovery Logic:
+AutoClip AI automatically checks:
+1. `FFMPEG_PATH` and `FFPROBE_PATH` environment variables (set in `.env`).
+2. System `PATH`.
+3. Standard Windows installation directories (including `C:\Program Files\kdenlive\bin\`, `C:\Program Files (x86)\YouTube Playlist Downloader\`, and `C:\ffmpeg\bin\`).
 
 ---
 
-## 6. Quick Start Guide
+## 6. Windows Setup & Quick Start Guide
 
-### Step 1: Clone or Navigate to Project
-```bash
+### Step 1: Navigate to Project Directory
+```powershell
 cd D:\clip
 ```
 
-### Step 2: Configure Environment (Optional)
-Copy `.env.example` to `.env` and insert your Google Gemini API key if available:
-```bash
-cp .env.example .env
-```
-*(Note: AutoClip AI features an offline acoustic & heuristic analysis engine that operates out of the box even before an external API key is added!)*
+### Step 2: Create and Activate a Fresh Virtual Environment
+```powershell
+# Create Python 3.13 virtual environment
+python -m venv .venv
 
-### Step 3: Run the Application
-```bash
-python run.py
-```
-Open your browser to: **`http://localhost:8000`**
+# Activate on Windows PowerShell
+.\.venv\Scripts\Activate.ps1
 
-### Step 4: Run Automated Tests
-```bash
+# (If PowerShell script execution is restricted, run: Set-ExecutionPolicy -ExecutionPolicy RemoteSigned -Scope CurrentUser)
+```
+
+### Step 3: Install Core Dependencies
+```powershell
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+```
+
+### Step 4: Configure Environment Variables
+Copy the template and configure your keys:
+```powershell
+Copy-Item .env.example .env
+```
+Edit `.env` to add your Google Gemini API key:
+```ini
+GEMINI_API_KEY=your_gemini_api_key_here
+```
+*(AutoClip AI also operates completely offline with its algorithmic analysis engine if no API key is provided).*
+
+### Step 5: Verify the Installation
+Run the automated test suite to verify scoring, FFmpeg video processing, and API handlers:
+```powershell
 python run_tests.py
 ```
+Expected output:
+```text
+==================================================
+  AutoClip AI – Automated Test Suite Execution   
+==================================================
+--- 1. Virality Scoring Engine (8-Factor Model) ---
+  [PASS] Weights strictly sum to 100%
+  [PASS] Perfect factors yield 100 score
+  [PASS] Zero factors yield 0 score
+  [PASS] Category threshold boundaries (High >=80, Med 60-79, Low <60)
+  [PASS] Heuristic 8-factor evaluation & breakdown
+--- 2. FFmpeg 8.0.1 Video & Subtitle Processing Pipeline ---
+  [PASS] End-to-End 9:16 Video Cutting, Subtitling & Encoding
+--- 3. FastAPI Service Handlers & Database Persistence ---
+  [PASS] list_bgm_tracks()
+  [PASS] list_subtitle_presets() (all 5 presets present)
+  [PASS] get_dashboard_stats()
+  [PASS] list_projects()
+  [PASS] FastAPI Endpoints, Subtitle Presets & Dashboard Stats
+==================================================
+  RESULTS: 7 PASSED, 0 FAILED
+==================================================
+```
+
+### Step 6: Launch AutoClip AI
+```powershell
+python run.py
+```
+Open your browser and navigate to: **`http://localhost:8000`**
 
 ---
 
 ## 7. Security and Authorized Media Policy
 - AutoClip AI strictly adheres to platform terms: it checks authorized video streams and never bypasses DRM. If an authorized video stream is restricted by YouTube, the user is politely guided to upload their original video file directly.
 - Secrets and API keys are read from environment variables and never exposed to the frontend client.
+- Local databases (`*.db`) and `.env` credentials are automatically excluded by `.gitignore`.
