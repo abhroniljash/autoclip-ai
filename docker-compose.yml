@@ -24,6 +24,7 @@ services:
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-1000}
       AWS_REGION: ${AWS_REGION:-ap-south-1}
+      AWS_PROFILE: ${AWS_PROFILE:-default}
       S3_BUCKET: ${S3_BUCKET:-}
       SQS_QUEUE_URL: ${SQS_QUEUE_URL:-}
       ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-http://localhost:8000}
@@ -32,6 +33,7 @@ services:
       - "8000:8000"
     volumes:
       - autoclip_storage:/app/storage
+      - ~/.aws:/home/appuser/.aws:ro
     depends_on:
       db:
         condition: service_healthy
