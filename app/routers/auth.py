@@ -71,8 +71,14 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
     if user is None or not user.password_hash or not verify_password(payload.password, user.password_hash):
         raise HTTPException(status_code=401, detail="Invalid email or password.")
     from app.auth import ACCESS_TOKEN_MINUTES
+    access_token = create_access_token(user)
+    response.set_cookie(
+        key="autoclip_access_token", value=access_token, httponly=True,
+        secure=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
+        samesite="strict", max_age=ACCESS_TOKEN_MINUTES * 60, path="/",
+    )
     return TokenResponse(
-        access_token=create_access_token(user),
+        access_token=access_token,
         expires_in=ACCESS_TOKEN_MINUTES * 60,
         user=UserResponse(id=user.id, name=user.name, email=user.email),
     )
