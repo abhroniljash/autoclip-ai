@@ -18,6 +18,8 @@ from app.schemas import (
 )
 from app.config import UPLOAD_DIR, ALLOWED_VIDEO_EXTENSIONS, MAX_FILE_SIZE_MB
 from app.services.pipeline import run_project_pipeline
+from app.services.aws_storage import enabled as s3_enabled, upload_file as s3_upload, delete_prefix as s3_delete_prefix
+from app.services.aws_queue import enqueue_project
 
 router = APIRouter(prefix="/api", tags=["Projects"])
 logger = logging.getLogger("autoclip.projects")
@@ -70,7 +72,13 @@ def get_project_detail(project_id: str, user: User = Depends(get_current_user), 
 @router.get("/projects/{project_id}/thumbnail")
 def get_project_thumbnail(project_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     project = db.query(Project).filter(Project.id == project_id, Project.user_id == user.id).first()
-    if not project or not project.thumbnail_path or not Path(project.thumbnail_path).is_file():
+    if not project or not project.thumbnail_path:
+        raise HTTPException(status_code=404, detail="Project thumbnail not found.")
+    if project.thumbnail_path.startswith("s3://"):
+        from fastapi.responses import RedirectResponse
+        from app.services.aws_storage import presigned_url
+        return RedirectResponse(presigned_url(project.thumbnail_path), status_code=307)
+    if not Path(project.thumbnail_path).is_file():
         raise HTTPException(status_code=404, detail="Project thumbnail not found.")
     return FileResponse(project.thumbnail_path, media_type="image/jpeg")
 @router.post("/projects/upload", response_model=ProjectResponse)
@@ -141,8 +149,17 @@ async def upload_video_project(
     project.source_reference = str(target_file)
     db.commit()
 
-    # Trigger asynchronous background processing pipeline
-    background_tasks.add_task(run_project_pipeline, project.id)
+    # Persist the source privately in S3; EFS remains the shared processing workspace.
+    if s3_enabled():
+        try:
+            s3_upload(str(target_file), f"users/{user.id}/projects/{project.id}/source{ext}", "video/mp4" if ext == ".mp4" else None)
+        except Exception:
+            logger.exception("Could not persist source video to S3")
+            raise HTTPException(status_code=503, detail="Secure media storage is temporarily unavailable.")
+
+    # SQS is used in AWS; local BackgroundTasks are retained for development.
+    if not enqueue_project(project.id):
+        background_tasks.add_task(run_project_pipeline, project.id)
 
     resp = ProjectResponse.model_validate(project)
     resp.clip_count = 0
@@ -237,8 +254,14 @@ async def import_youtube_project(
     db.commit()
     db.refresh(project)
 
-    # Launch Pipeline
-    background_tasks.add_task(run_project_pipeline, project.id)
+    if s3_enabled():
+        try:
+            s3_upload(str(target_file), f"users/{user.id}/projects/{project.id}/source.mp4", "video/mp4")
+        except Exception:
+            logger.exception("Could not persist imported video to S3")
+            raise HTTPException(status_code=503, detail="Secure media storage is temporarily unavailable.")
+    if not enqueue_project(project.id):
+        background_tasks.add_task(run_project_pipeline, project.id)
 
     resp = ProjectResponse.model_validate(project)
     resp.clip_count = 0
@@ -251,6 +274,11 @@ def delete_project(project_id: str, user: User = Depends(get_current_user), db: 
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    # Remove private S3 objects as well as local EFS artifacts.
+    try:
+        s3_delete_prefix(f"users/{user.id}/projects/{project.id}/")
+    except Exception:
+        logger.exception("Could not delete S3 objects for project %s", project_id)
     # Clean up files
     try:
         if project.source_reference and Path(project.source_reference).exists():
