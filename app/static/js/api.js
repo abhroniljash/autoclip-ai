@@ -15,7 +15,7 @@ export const api = {
         const res = await fetch(API_BASE + "/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(body.detail || "Login failed");
-        sessionStorage.setItem("autoclip_access_token", body.access_token);
+        sessionStorage.setItem("autoclip_authenticated", "1");
         return body.user;
     },
     async logout() {
