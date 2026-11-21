@@ -92,6 +92,13 @@ def main():
                 if payload.get("type") == "process_project":
                     project_id = str(payload["project_id"])
                     asyncio.run(run_project_pipeline(project_id))
+                    check_db = SessionLocal()
+                    try:
+                        completed = check_db.query(Project).filter(Project.id == project_id, Project.processing_status == "completed").first()
+                        if not completed:
+                            raise RuntimeError("Video pipeline did not reach completed state.")
+                    finally:
+                        check_db.close()
                     persist_project_media(project_id)
                 elif payload.get("type") == "process_export":
                     run_export_job(str(payload["export_job_id"]))
