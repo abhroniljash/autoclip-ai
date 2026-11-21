@@ -2,7 +2,7 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -36,14 +36,24 @@ def list_subtitle_presets():
 @router.get("/{clip_id}/media")
 def get_clip_media(clip_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     clip = db.query(Clip).join(Project).filter(Clip.id == clip_id, Project.user_id == user.id).first()
-    if not clip or not clip.output_file_path or not Path(clip.output_file_path).is_file():
+    if not clip or not clip.output_file_path:
+        raise HTTPException(status_code=404, detail="Rendered clip not found.")
+    if clip.output_file_path.startswith("s3://"):
+        from app.services.aws_storage import presigned_url
+        return RedirectResponse(presigned_url(clip.output_file_path), status_code=307)
+    if not Path(clip.output_file_path).is_file():
         raise HTTPException(status_code=404, detail="Rendered clip not found.")
     return FileResponse(clip.output_file_path, media_type="video/mp4")
 
 @router.get("/{clip_id}/thumbnail")
 def get_clip_thumbnail(clip_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     clip = db.query(Clip).join(Project).filter(Clip.id == clip_id, Project.user_id == user.id).first()
-    if not clip or not clip.thumbnail_path or not Path(clip.thumbnail_path).is_file():
+    if not clip or not clip.thumbnail_path:
+        raise HTTPException(status_code=404, detail="Clip thumbnail not found.")
+    if clip.thumbnail_path.startswith("s3://"):
+        from app.services.aws_storage import presigned_url
+        return RedirectResponse(presigned_url(clip.thumbnail_path), status_code=307)
+    if not Path(clip.thumbnail_path).is_file():
         raise HTTPException(status_code=404, detail="Clip thumbnail not found.")
     return FileResponse(clip.thumbnail_path, media_type="image/jpeg")
 @router.get("/{clip_id}", response_model=ClipResponse)
