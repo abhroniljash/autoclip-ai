@@ -1,0 +1,41 @@
+# Environment variables & secrets (CRITICAL: Do not commit API keys)
+.env
+.env.local
+.env.*.local
+
+# Databases
+*.db
+*.sqlite
+*.sqlite3
+
+# Storage media & temporary video/audio files
+storage/uploads/*
+!storage/uploads/.gitkeep
+storage/audio/*
+!storage/audio/.gitkeep
+storage/clips/*
+!storage/clips/.gitkeep
+storage/subtitles/*
+!storage/subtitles/.gitkeep
+storage/exports/*
+!storage/exports/.gitkeep
+
+# Python cache & build files
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+.venv/
+
+# Testing & Logs
+.pytest_cache/
+*.log
+
+# IDE & OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
