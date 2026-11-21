@@ -19,7 +19,13 @@ export const api = {
         sessionStorage.setItem("autoclip_access_token", body.access_token);
         return body.user;
     },
-    logout() { sessionStorage.removeItem("autoclip_access_token"); },
+    async logout() {
+        try {
+            await fetch(API_BASE + "/auth/logout", { method: "POST", headers: authHeaders() });
+        } finally {
+            sessionStorage.removeItem("autoclip_access_token");
+        }
+    },
     async getDashboardStats() {
         const res = await fetch(`${API_BASE}/dashboard/stats`, { headers: authHeaders() });
         if (!res.ok) throw new Error("Failed to load dashboard stats");
