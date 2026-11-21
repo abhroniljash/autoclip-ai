@@ -57,7 +57,7 @@ def get_export_job_status(job_id: str, user: User = Depends(get_current_user), d
 @router.get("/export/{job_id}/download")
 def download_export_zip(job_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Download consolidated ZIP archive containing clips, subtitles, and metadata."""
-    job = db.query(ExportJob).filter(ExportJob.id == job_id).first()
+    job = db.query(ExportJob).join(Project).filter(ExportJob.id == job_id, Project.user_id == user.id).first()
     if not job or not job.zip_path or not Path(job.zip_path).exists():
         raise HTTPException(status_code=404, detail="Export ZIP archive is not ready or missing.")
 
@@ -85,7 +85,7 @@ def download_single_clip(clip_id: str, user: User = Depends(get_current_user), d
 @router.get("/clips/{clip_id}/subtitles")
 def download_clip_subtitles(clip_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Download synchronized .srt subtitle file for this clip."""
-    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    clip = db.query(Clip).join(Project).filter(Clip.id == clip_id, Project.user_id == user.id).first()
     if not clip:
         raise HTTPException(status_code=404, detail="Clip not found")
 
