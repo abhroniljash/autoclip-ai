@@ -84,6 +84,15 @@ def login(payload: LoginRequest, response: Response, db: Session = Depends(get_d
     )
 
 
+@router.post("/logout")
+def logout(response: Response):
+    response.delete_cookie(
+        key="autoclip_access_token", path="/", httponly=True,
+        secure=os.environ.get("COOKIE_SECURE", "false").lower() == "true",
+        samesite="strict",
+    )
+    return {"status": "success"}
+
 @router.get("/me", response_model=UserResponse)
 def me(user: User = Depends(get_current_user)):
     return UserResponse(id=user.id, name=user.name, email=user.email)
