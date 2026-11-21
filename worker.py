@@ -15,6 +15,7 @@ from app.database import SessionLocal
 from app.models import Project, Clip
 from app.services.pipeline import run_project_pipeline
 from app.services.aws_storage import enabled, upload_file, AWS_REGION
+from app.services.job_runner import run_export_job
 
 logging.basicConfig(level=os.environ.get("LOG_LEVEL", "INFO"))
 logger = logging.getLogger("autoclip.worker")
@@ -70,12 +71,14 @@ def main():
         for message in response.get("Messages", []):
             try:
                 payload = json.loads(message["Body"])
-                if payload.get("type") != "process_project":
-                    logger.warning("Ignoring unsupported SQS message type")
-                else:
+                if payload.get("type") == "process_project":
                     project_id = str(payload["project_id"])
                     asyncio.run(run_project_pipeline(project_id))
                     persist_project_media(project_id)
+                elif payload.get("type") == "process_export":
+                    run_export_job(str(payload["export_job_id"]))
+                else:
+                    logger.warning("Ignoring unsupported SQS message type")
                 sqs.delete_message(QueueUrl=QUEUE_URL, ReceiptHandle=message["ReceiptHandle"])
             except Exception:
                 logger.exception("Project job failed; leaving message for SQS retry/DLQ")
