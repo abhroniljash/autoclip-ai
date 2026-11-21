@@ -2,9 +2,12 @@ import logging
 from pathlib import Path
 from typing import List, Dict, Any
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
+from fastapi.responses import FileResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.auth import get_current_user
+from app.models import User
 from app.models import Clip, Project
 from app.schemas import ClipResponse, ClipUpdate
 from app.config import CLIPS_DIR, SUBTITLES_DIR, BGM_DIR, SUBTITLE_PRESETS
@@ -30,18 +33,41 @@ def list_subtitle_presets():
     """Returns the 5 subtitle styling presets with their visual configuration."""
     return SUBTITLE_PRESETS
 
+@router.get("/{clip_id}/media")
+def get_clip_media(clip_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    clip = db.query(Clip).join(Project).filter(Clip.id == clip_id, Project.user_id == user.id).first()
+    if not clip or not clip.output_file_path:
+        raise HTTPException(status_code=404, detail="Rendered clip not found.")
+    if clip.output_file_path.startswith("s3://"):
+        from app.services.aws_storage import presigned_url
+        return RedirectResponse(presigned_url(clip.output_file_path), status_code=307)
+    if not Path(clip.output_file_path).is_file():
+        raise HTTPException(status_code=404, detail="Rendered clip not found.")
+    return FileResponse(clip.output_file_path, media_type="video/mp4")
+
+@router.get("/{clip_id}/thumbnail")
+def get_clip_thumbnail(clip_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    clip = db.query(Clip).join(Project).filter(Clip.id == clip_id, Project.user_id == user.id).first()
+    if not clip or not clip.thumbnail_path:
+        raise HTTPException(status_code=404, detail="Clip thumbnail not found.")
+    if clip.thumbnail_path.startswith("s3://"):
+        from app.services.aws_storage import presigned_url
+        return RedirectResponse(presigned_url(clip.thumbnail_path), status_code=307)
+    if not Path(clip.thumbnail_path).is_file():
+        raise HTTPException(status_code=404, detail="Clip thumbnail not found.")
+    return FileResponse(clip.thumbnail_path, media_type="image/jpeg")
 @router.get("/{clip_id}", response_model=ClipResponse)
-def get_clip(clip_id: str, db: Session = Depends(get_db)):
+def get_clip(clip_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Fetch clip details by ID."""
-    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    clip = db.query(Clip).join(Project).filter(Clip.id == clip_id, Project.user_id == user.id).first()
     if not clip:
         raise HTTPException(status_code=404, detail="Clip not found")
     return ClipResponse.model_validate(clip)
 
 @router.patch("/{clip_id}", response_model=ClipResponse)
-def update_clip_settings(clip_id: str, payload: ClipUpdate, db: Session = Depends(get_db)):
+def update_clip_settings(clip_id: str, payload: ClipUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Update clip parameters (trim start/end, crop mode, subtitle style, audio settings)."""
-    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    clip = db.query(Clip).join(Project).filter(Clip.id == clip_id, Project.user_id == user.id).first()
     if not clip:
         raise HTTPException(status_code=404, detail="Clip not found")
 
@@ -58,12 +84,12 @@ def update_clip_settings(clip_id: str, payload: ClipUpdate, db: Session = Depend
     return ClipResponse.model_validate(clip)
 
 @router.post("/{clip_id}/render", response_model=ClipResponse)
-def trigger_clip_re_render(clip_id: str, db: Session = Depends(get_db)):
+def trigger_clip_re_render(clip_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Re-renders the vertical 9:16 clip using FFmpeg with latest trim, crop,
     subtitle style, and audio normalization settings.
     """
-    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    clip = db.query(Clip).join(Project).filter(Clip.id == clip_id, Project.user_id == user.id).first()
     if not clip:
         raise HTTPException(status_code=404, detail="Clip not found")
         

@@ -62,9 +62,6 @@ class ClipResponse(BaseModel):
     
     is_selected: bool
     clip_status: str
-    output_file_path: Optional[str] = None
-    thumbnail_path: Optional[str] = None
-    subtitle_file_path: Optional[str] = None
     metadata_info: Optional[ClipMetadataResponse] = None
 
     class Config:
@@ -101,12 +98,10 @@ class ProjectResponse(BaseModel):
     id: str
     project_name: str
     source_type: str
-    source_reference: str
     source_title: Optional[str] = None
     video_duration: float
     video_resolution: Optional[str] = None
     fps: float
-    thumbnail_path: Optional[str] = None
     processing_status: str
     progress: int
     error_message: Optional[str] = None
@@ -142,8 +137,6 @@ class ExportJobResponse(BaseModel):
     resolution: str
     quality: str
     aspect_ratio: str
-    output_path: Optional[str] = None
-    zip_path: Optional[str] = None
     error_message: Optional[str] = None
     created_at: datetime
 

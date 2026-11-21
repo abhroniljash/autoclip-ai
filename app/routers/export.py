@@ -2,13 +2,16 @@ import os
 import logging
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.auth import get_current_user
+from app.models import User
 from app.models import Project, Clip, ExportJob
 from app.schemas import ExportRequest, ExportJobResponse
-from app.services.export_service import build_project_zip_archive
+from app.services.job_runner import run_export_job
+from app.services.aws_queue import enqueue_export
 from app.services.subtitle_service import generate_srt_subtitles
 from app.config import SUBTITLES_DIR
 
@@ -20,10 +23,11 @@ def create_export_job(
     project_id: str,
     payload: ExportRequest,
     background_tasks: BackgroundTasks,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """Initiates batch export job for selected clips in a ZIP archive."""
-    project = db.query(Project).filter(Project.id == project_id).first()
+    project = db.query(Project).filter(Project.id == project_id, Project.user_id == user.id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
@@ -39,25 +43,30 @@ def create_export_job(
     db.commit()
     db.refresh(job)
 
-    # Launch ZIP creation in background
-    background_tasks.add_task(build_project_zip_archive, db, job.id)
+    # AWS uses durable SQS workers; local development uses an isolated DB session.
+    if not enqueue_export(job.id):
+        background_tasks.add_task(run_export_job, job.id)
     return ExportJobResponse.model_validate(job)
 
 @router.get("/export/{job_id}/status", response_model=ExportJobResponse)
-def get_export_job_status(job_id: str, db: Session = Depends(get_db)):
+def get_export_job_status(job_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Check progress of a batch export job."""
-    job = db.query(ExportJob).filter(ExportJob.id == job_id).first()
+    job = db.query(ExportJob).join(Project).filter(ExportJob.id == job_id, Project.user_id == user.id).first()
     if not job:
         raise HTTPException(status_code=404, detail="Export job not found")
     return ExportJobResponse.model_validate(job)
 
 @router.get("/export/{job_id}/download")
-def download_export_zip(job_id: str, db: Session = Depends(get_db)):
+def download_export_zip(job_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Download consolidated ZIP archive containing clips, subtitles, and metadata."""
-    job = db.query(ExportJob).filter(ExportJob.id == job_id).first()
-    if not job or not job.zip_path or not Path(job.zip_path).exists():
+    job = db.query(ExportJob).join(Project).filter(ExportJob.id == job_id, Project.user_id == user.id).first()
+    if not job or not job.zip_path:
         raise HTTPException(status_code=404, detail="Export ZIP archive is not ready or missing.")
-
+    if job.zip_path.startswith("s3://"):
+        from app.services.aws_storage import presigned_url
+        return RedirectResponse(presigned_url(job.zip_path), status_code=307)
+    if not Path(job.zip_path).exists():
+        raise HTTPException(status_code=404, detail="Export ZIP archive is not ready or missing.")
     filename = Path(job.zip_path).name
     return FileResponse(
         path=job.zip_path,
@@ -66,13 +75,18 @@ def download_export_zip(job_id: str, db: Session = Depends(get_db)):
     )
 
 @router.get("/clips/{clip_id}/download")
-def download_single_clip(clip_id: str, db: Session = Depends(get_db)):
+def download_single_clip(clip_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Download single rendered 9:16 vertical video clip."""
-    clip = db.query(Clip).filter(Clip.id == clip_id).first()
-    if not clip or not clip.output_file_path or not Path(clip.output_file_path).exists():
+    clip = db.query(Clip).join(Project).filter(Clip.id == clip_id, Project.user_id == user.id).first()
+    if not clip or not clip.output_file_path:
         raise HTTPException(status_code=404, detail="Rendered clip not found. Please render the clip first.")
 
     safe_title = "".join(c for c in clip.title if c.isalnum() or c in (" ", "-", "_")).strip()
+    if clip.output_file_path.startswith("s3://"):
+        from app.services.aws_storage import presigned_url
+        return RedirectResponse(presigned_url(clip.output_file_path), status_code=307)
+    if not Path(clip.output_file_path).exists():
+        raise HTTPException(status_code=404, detail="Rendered clip not found. Please render the clip first.")
     return FileResponse(
         path=clip.output_file_path,
         media_type="video/mp4",
@@ -80,9 +94,9 @@ def download_single_clip(clip_id: str, db: Session = Depends(get_db)):
     )
 
 @router.get("/clips/{clip_id}/subtitles")
-def download_clip_subtitles(clip_id: str, db: Session = Depends(get_db)):
+def download_clip_subtitles(clip_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Download synchronized .srt subtitle file for this clip."""
-    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    clip = db.query(Clip).join(Project).filter(Clip.id == clip_id, Project.user_id == user.id).first()
     if not clip:
         raise HTTPException(status_code=404, detail="Clip not found")
 

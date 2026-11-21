@@ -4,7 +4,7 @@ AutoClip AI – Long-to-Short Video Repurposing Platform
 Entrypoint script to start the web application and backend API.
 """
 
-import sys
+import os
 import uvicorn
 from pathlib import Path
 from app.config import FFMPEG_PATH, FFPROBE_PATH, BASE_DIR
@@ -26,7 +26,7 @@ def main():
         "app.main:app",
         host="0.0.0.0",
         port=8000,
-        reload=True
+        reload=os.environ.get("APP_RELOAD", "false").lower() == "true"
     )
 
 if __name__ == "__main__":

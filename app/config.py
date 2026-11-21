@@ -156,4 +156,4 @@ SUBTITLE_PRESETS = {
 
 # Supported Video Import Formats
 ALLOWED_VIDEO_EXTENSIONS = {".mp4", ".mov", ".webm", ".mkv"}
-MAX_FILE_SIZE_MB = 1000  # 1 GB max for upload
+MAX_FILE_SIZE_MB = max(1, int(os.environ.get("MAX_UPLOAD_SIZE_MB", "1000")))  # hard upload limit in MiB

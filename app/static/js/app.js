@@ -31,6 +31,18 @@ function initTheme() {
         }
         if (window.lucide) window.lucide.createIcons();
     });
+    document.getElementById("sign-out-button")?.addEventListener("click", async () => {
+        await api.logout();
+        navigate("#/");
+        updateAuthControls();
+    });
+    updateAuthControls();
+}
+
+function updateAuthControls() {
+    const signedIn = Boolean(sessionStorage.getItem("autoclip_authenticated"));
+    document.getElementById("sign-in-link")?.classList.toggle("hidden", signedIn);
+    document.getElementById("sign-out-button")?.classList.toggle("hidden", !signedIn);
 }
 
 // Router
@@ -52,6 +64,9 @@ async function renderRoute() {
 
     const root = document.getElementById("app-root");
     const hash = state.currentRoute;
+    updateAuthControls();
+    const protectedRoute = hash.startsWith("#/dashboard") || hash.startsWith("#/projects/");
+    if (protectedRoute && !sessionStorage.getItem("autoclip_authenticated")) { navigate("#/login"); return; }
 
     // Update active nav links
     document.querySelectorAll(".nav-link").forEach(link => {
@@ -64,7 +79,9 @@ async function renderRoute() {
     });
 
     try {
-        if (hash === "#/" || hash === "") {
+        if (hash === "#/login" || hash === "#/register") {
+            renderAuthPage(root, hash === "#/register");
+        } else if (hash === "#/" || hash === "") {
             renderLandingPage(root);
         } else if (hash === "#/dashboard") {
             await renderDashboardPage(root);
@@ -96,6 +113,30 @@ async function renderRoute() {
     if (window.lucide) window.lucide.createIcons();
 }
 
+/* =========================================================================
+   AUTHENTICATION
+========================================================================= */
+function renderAuthPage(container, register = false) {
+    container.innerHTML = '<div class="max-w-md mx-auto my-12 p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">' +
+        '<h1 class="text-2xl font-bold mb-2">' + (register ? "Create your AutoClip AI account" : "Welcome back") + '</h1>' +
+        '<p class="text-sm text-slate-500 mb-6">' + (register ? "Create an account to manage your clips." : "Sign in to access your projects.") + '</p>' +
+        '<form id="auth-form" class="space-y-4">' +
+        (register ? '<label class="block text-sm">Name<input name="name" required maxlength="120" class="mt-1 w-full rounded-lg border p-3 dark:bg-slate-800"></label>' : "") +
+        '<label class="block text-sm">Email<input name="email" type="email" required autocomplete="email" class="mt-1 w-full rounded-lg border p-3 dark:bg-slate-800"></label>' +
+        '<label class="block text-sm">Password<input name="password" type="password" required minlength="' + (register ? "12" : "1") + '" autocomplete="' + (register ? "new-password" : "current-password") + '" class="mt-1 w-full rounded-lg border p-3 dark:bg-slate-800"></label>' +
+        '<p id="auth-error" class="text-sm text-red-600" role="alert"></p><button class="w-full rounded-lg bg-brand-600 text-white font-semibold p-3" type="submit">' + (register ? "Create account" : "Sign in") + '</button></form>' +
+        '<p class="text-sm text-center mt-5 text-slate-500">' + (register ? 'Already registered? <a href="#/login" class="text-brand-600 underline">Sign in</a>' : 'New here? <a href="#/register" class="text-brand-600 underline">Create an account</a>') + '</p></div>';
+    container.querySelector("#auth-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+        const error = container.querySelector("#auth-error");
+        error.textContent = "";
+        try {
+            if (register) await api.register(data); else await api.login(data);
+            navigate("#/dashboard");
+        } catch (err) { error.textContent = err.message || "Unable to authenticate."; }
+    });
+}
 /* =========================================================================
    PAGE 1: LANDING PAGE
 ========================================================================= */
@@ -419,8 +460,8 @@ function renderProjectCard(project) {
         <div class="group rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm hover:shadow-md transition-all overflow-hidden flex flex-col">
             <!-- Thumbnail / Preview Area -->
             <div class="aspect-video bg-slate-900 relative overflow-hidden cursor-pointer" onclick="window.location.hash='${targetUrl}'">
-                ${project.thumbnail_path 
-                    ? `<img src="/storage/uploads/${project.thumbnail_path.split('\\').pop().split('/').pop()}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="Thumbnail">`
+                ${project.video_duration > 0
+                    ? `<img src="/api/projects/${project.id}/thumbnail" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" alt="Thumbnail">`
                     : `<div class="w-full h-full flex items-center justify-center text-slate-600"><i data-lucide="video" class="w-8 h-8"></i></div>`
                 }
                 <div class="absolute top-3 left-3">${statusBadge}</div>
@@ -1031,8 +1072,8 @@ async function renderEditorPage(container, projectId, clipId) {
     const clip = await api.getClip(clipId);
     state.currentClip = clip;
 
-    const videoSrc = clip.output_file_path 
-        ? `/storage/clips/${clip.output_file_path.split('\\').pop().split('/').pop()}`
+    const videoSrc = clip.clip_status === "ready"
+        ? `/api/clips/${clip.id}/media`
         : "";
 
     container.innerHTML = `
@@ -1253,7 +1294,7 @@ async function renderEditorPage(container, projectId, clipId) {
             
             // Reload player source with cache-buster
             const player = document.getElementById("editor-video-player");
-            const newSrc = `/storage/clips/${updated.output_file_path.split('\\').pop().split('/').pop()}?t=${Date.now()}`;
+            const newSrc = `/api/clips/${updated.id}/media?t=${Date.now()}`;
             player.src = newSrc;
             player.load();
             player.play().catch(() => {});
@@ -1375,8 +1416,8 @@ async function renderExportPage(container, projectId) {
 
 function renderExportClipItem(clip, idx) {
     const meta = clip.metadata_info || {};
-    const videoSrc = clip.output_file_path 
-        ? `/storage/clips/${clip.output_file_path.split('\\').pop().split('/').pop()}`
+    const videoSrc = clip.clip_status === "ready"
+        ? `/api/clips/${clip.id}/media`
         : "";
 
     return `

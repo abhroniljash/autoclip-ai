@@ -52,6 +52,28 @@ from tests.test_api_direct import test_api_handlers_direct
 print("\n--- 3. FastAPI Service Handlers & Database Persistence ---")
 run_test("FastAPI Endpoints, Subtitle Presets & Dashboard Stats", test_api_handlers_direct)
 
+from tests.test_security import (
+    test_accepts_mp4_signature,
+    test_accepts_webm_and_matroska_signature,
+    test_rejects_unknown_or_short_signature,
+)
+
+print("\n--- 4. Upload Security Checks ---")
+run_test("Accept supported MP4 container signature", test_accepts_mp4_signature)
+run_test("Accept WebM/Matroska container signature", test_accepts_webm_and_matroska_signature)
+run_test("Reject unknown and truncated container signatures", test_rejects_unknown_or_short_signature)
+
+from tests.test_auth import (
+    test_password_hash_round_trip,
+    test_password_minimum_length,
+    test_jwt_token_contains_required_claims,
+)
+
+print("\n--- 5. Authentication Checks ---")
+run_test("Password hashing and verification", test_password_hash_round_trip)
+run_test("Reject short passwords", test_password_minimum_length)
+run_test("JWT token claims and signature", test_jwt_token_contains_required_claims)
+
 print("\n==================================================")
 print(f"  RESULTS: {passed} PASSED, {failed} FAILED")
 print("==================================================")

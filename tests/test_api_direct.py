@@ -1,4 +1,5 @@
 import sys
+from types import SimpleNamespace
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
@@ -29,7 +30,7 @@ def test_api_handlers_direct():
         print("  [PASS] list_subtitle_presets() (all 5 presets present)")
 
         # 3. Test Dashboard Stats handler
-        stats = get_dashboard_stats(db=db)
+        stats = get_dashboard_stats(user=SimpleNamespace(id="test-user"), db=db)
         assert "total_projects" in stats
         assert "total_videos_processed" in stats
         assert "total_clips_generated" in stats
@@ -37,7 +38,7 @@ def test_api_handlers_direct():
         print("  [PASS] get_dashboard_stats()")
 
         # 4. Test List Projects handler
-        projects = list_projects(db=db)
+        projects = list_projects(user=SimpleNamespace(id="test-user"), db=db)
         assert isinstance(projects, list)
         print("  [PASS] list_projects()")
 

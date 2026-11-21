@@ -1,0 +1,10 @@
+variable "aws_region" {
+  description = "AWS deployment region"
+  type = string
+  default = "ap-south-1"
+}
+
+variable "media_bucket_name" {
+  description = "Globally unique S3 bucket name for private AutoClip AI media"
+  type = string
+}

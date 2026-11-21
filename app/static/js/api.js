@@ -1,22 +1,44 @@
 // AutoClip AI - Frontend API Client
 
 const API_BASE = "/api";
+const authHeaders = (extra = {}) => ({ ...extra });
 
 export const api = {
+    async register(data) {
+        const res = await fetch(API_BASE + "/auth/register", { method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(data) });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.detail || "Registration failed");
+        sessionStorage.setItem("autoclip_authenticated", "1");
+        return body.user;
+    },
+    async login(data) {
+        const res = await fetch(API_BASE + "/auth/login", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(data) });
+        const body = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(body.detail || "Login failed");
+        sessionStorage.setItem("autoclip_authenticated", "1");
+        return body.user;
+    },
+    async logout() {
+        try {
+            await fetch(API_BASE + "/auth/logout", { method: "POST", headers: authHeaders() });
+        } finally {
+            sessionStorage.removeItem("autoclip_authenticated");
+        }
+    },
     async getDashboardStats() {
-        const res = await fetch(`${API_BASE}/dashboard/stats`);
+        const res = await fetch(`${API_BASE}/dashboard/stats`, { headers: authHeaders() });
         if (!res.ok) throw new Error("Failed to load dashboard stats");
         return res.json();
     },
 
     async getProjects() {
-        const res = await fetch(`${API_BASE}/projects`);
+        const res = await fetch(`${API_BASE}/projects`, { headers: authHeaders() });
         if (!res.ok) throw new Error("Failed to load projects");
         return res.json();
     },
 
     async getProject(projectId) {
-        const res = await fetch(`${API_BASE}/projects/${projectId}`);
+        const res = await fetch(`${API_BASE}/projects/${projectId}`, { headers: authHeaders() });
         if (!res.ok) throw new Error("Failed to load project details");
         return res.json();
     },
@@ -60,7 +82,7 @@ export const api = {
     async importYouTube(data) {
         const res = await fetch(`${API_BASE}/projects/youtube`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify(data)
         });
         if (!res.ok) {
@@ -72,14 +94,15 @@ export const api = {
 
     async deleteProject(projectId) {
         const res = await fetch(`${API_BASE}/projects/${projectId}`, {
-            method: "DELETE"
+            method: "DELETE",
+            headers: authHeaders()
         });
         if (!res.ok) throw new Error("Failed to delete project");
         return res.json();
     },
 
     async getClip(clipId) {
-        const res = await fetch(`${API_BASE}/clips/${clipId}`);
+        const res = await fetch(`${API_BASE}/clips/${clipId}`, { headers: authHeaders() });
         if (!res.ok) throw new Error("Failed to fetch clip");
         return res.json();
     },
@@ -87,7 +110,7 @@ export const api = {
     async updateClip(clipId, data) {
         const res = await fetch(`${API_BASE}/clips/${clipId}`, {
             method: "PATCH",
-            headers: { "Content-Type": "application/json" },
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify(data)
         });
         if (!res.ok) throw new Error("Failed to update clip");
@@ -96,7 +119,8 @@ export const api = {
 
     async reRenderClip(clipId) {
         const res = await fetch(`${API_BASE}/clips/${clipId}/render`, {
-            method: "POST"
+            method: "POST",
+            headers: authHeaders()
         });
         if (!res.ok) {
             const err = await res.json().catch(() => ({}));
@@ -114,7 +138,7 @@ export const api = {
     async createExportJob(projectId, data) {
         const res = await fetch(`${API_BASE}/projects/${projectId}/export`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify(data)
         });
         if (!res.ok) throw new Error("Failed to start export job");
@@ -122,7 +146,7 @@ export const api = {
     },
 
     async getExportJobStatus(jobId) {
-        const res = await fetch(`${API_BASE}/export/${jobId}/status`);
+        const res = await fetch(`${API_BASE}/export/${jobId}/status`, { headers: authHeaders() });
         if (!res.ok) throw new Error("Failed to check export status");
         return res.json();
     }

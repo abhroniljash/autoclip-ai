@@ -2,29 +2,37 @@ import os
 import shutil
 import logging
 from pathlib import Path
+from urllib.parse import urlsplit
+import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.auth import get_current_user
+from app.models import User
 from app.models import Project, Clip, VideoAnalysis
 from app.schemas import (
     ProjectResponse, ProjectDetailResponse, ProjectCreateURL, DashboardStatsResponse
 )
 from app.config import UPLOAD_DIR, ALLOWED_VIDEO_EXTENSIONS, MAX_FILE_SIZE_MB
 from app.services.pipeline import run_project_pipeline
+from app.services.aws_storage import enabled as s3_enabled, upload_file as s3_upload, delete_prefix as s3_delete_prefix
+from app.services.aws_queue import enqueue_project
 
 router = APIRouter(prefix="/api", tags=["Projects"])
 logger = logging.getLogger("autoclip.projects")
 
 @router.get("/dashboard/stats", response_model=DashboardStatsResponse)
-def get_dashboard_stats(db: Session = Depends(get_db)):
+def get_dashboard_stats(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Fetch dashboard statistics and recent projects."""
-    total_projects = db.query(Project).count()
-    completed_projects = db.query(Project).filter(Project.processing_status == "completed").count()
-    total_clips = db.query(Clip).count()
+    total_projects = db.query(Project).filter(Project.user_id == user.id).count()
+    completed_projects = db.query(Project).filter(Project.user_id == user.id, Project.processing_status == "completed").count()
+    total_clips = db.query(Clip).join(Project).filter(Project.user_id == user.id).count()
     
-    recent = db.query(Project).order_by(Project.created_at.desc()).limit(8).all()
+    recent = db.query(Project).filter(Project.user_id == user.id).order_by(Project.created_at.desc()).limit(8).all()
     
     # Calculate clip counts
     recent_responses = []
@@ -41,9 +49,9 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     }
 
 @router.get("/projects", response_model=List[ProjectResponse])
-def list_projects(db: Session = Depends(get_db)):
+def list_projects(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """List all projects ordered by newest first."""
-    projects = db.query(Project).order_by(Project.created_at.desc()).all()
+    projects = db.query(Project).filter(Project.user_id == user.id).order_by(Project.created_at.desc()).all()
     results = []
     for p in projects:
         resp = ProjectResponse.model_validate(p)
@@ -52,9 +60,9 @@ def list_projects(db: Session = Depends(get_db)):
     return results
 
 @router.get("/projects/{project_id}", response_model=ProjectDetailResponse)
-def get_project_detail(project_id: str, db: Session = Depends(get_db)):
+def get_project_detail(project_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Fetch complete project details including AI analysis results and clips."""
-    project = db.query(Project).filter(Project.id == project_id).first()
+    project = db.query(Project).filter(Project.id == project_id, Project.user_id == user.id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
         
@@ -62,6 +70,18 @@ def get_project_detail(project_id: str, db: Session = Depends(get_db)):
     resp.clip_count = len(project.clips)
     return resp
 
+@router.get("/projects/{project_id}/thumbnail")
+def get_project_thumbnail(project_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id, Project.user_id == user.id).first()
+    if not project or not project.thumbnail_path:
+        raise HTTPException(status_code=404, detail="Project thumbnail not found.")
+    if project.thumbnail_path.startswith("s3://"):
+        from fastapi.responses import RedirectResponse
+        from app.services.aws_storage import presigned_url
+        return RedirectResponse(presigned_url(project.thumbnail_path), status_code=307)
+    if not Path(project.thumbnail_path).is_file():
+        raise HTTPException(status_code=404, detail="Project thumbnail not found.")
+    return FileResponse(project.thumbnail_path, media_type="image/jpeg")
 @router.post("/projects/upload", response_model=ProjectResponse)
 async def upload_video_project(
     background_tasks: BackgroundTasks,
@@ -71,26 +91,36 @@ async def upload_video_project(
     duration_preference: str = Form("30-60"),
     language: str = Form("en"),
     default_style: str = Form("bold_viral"),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
     Upload a video file (MP4, MOV, WebM), validate file type and size,
     and trigger the autonomous AI repurposing pipeline in the background.
     """
-    ext = Path(file.filename or "").suffix.lower()
+    original_name = Path(file.filename or "video").name
+    ext = Path(original_name).suffix.lower()
     if ext not in ALLOWED_VIDEO_EXTENSIONS:
         raise HTTPException(
             status_code=400,
-            detail=f"Unsupported format '{ext}'. Allowed: {', '.join(ALLOWED_VIDEO_EXTENSIONS)}"
+            detail=f"Unsupported format '{ext}'. Allowed: {', '.join(sorted(ALLOWED_VIDEO_EXTENSIONS))}"
         )
-        
-    p_name = project_name or Path(file.filename).stem or "Untitled Video Project"
-    
-    # Create Project Record
+
+    if not 1 <= target_clip_count <= 20:
+        raise HTTPException(status_code=422, detail="Target clip count must be between 1 and 20.")
+    if duration_preference not in {"20-40", "30-60", "60-90", "auto"}:
+        raise HTTPException(status_code=422, detail="Unsupported clip duration preference.")
+    if language not in {"en", "bn", "hi"}:
+        raise HTTPException(status_code=422, detail="Unsupported subtitle language.")
+    if default_style not in {"bold_viral", "clean_minimal", "podcast", "cinematic", "highlight_keyword"}:
+        raise HTTPException(status_code=422, detail="Unsupported subtitle style.")
+
+    p_name = (project_name or Path(original_name).stem or "Untitled Video Project").strip()[:255]
     project = Project(
         project_name=p_name,
         source_type="upload",
-        source_reference="", # to be set below
+        source_reference="",
+        user_id=user.id,
         target_clip_count=target_clip_count,
         duration_preference=duration_preference,
         language=language,
@@ -102,21 +132,35 @@ async def upload_video_project(
     db.commit()
     db.refresh(project)
 
-    # Save Uploaded File
-    target_file = UPLOAD_DIR / f"{project.id}_{file.filename}"
+    # Never use the client-provided filename as a filesystem path.
+    target_file = UPLOAD_DIR / f"{project.id}{ext}"
     try:
-        with open(target_file, "wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-    except Exception as e:
+        from app.security import save_video_upload
+        await save_video_upload(file, target_file, MAX_FILE_SIZE_MB * 1024 * 1024)
+    except HTTPException:
         db.delete(project)
         db.commit()
-        raise HTTPException(status_code=500, detail=f"Failed to store uploaded video: {e}")
+        raise
+    except Exception:
+        logger.exception("Failed to store uploaded video for project %s", project.id)
+        db.delete(project)
+        db.commit()
+        raise HTTPException(status_code=500, detail="Failed to store uploaded video.")
 
     project.source_reference = str(target_file)
     db.commit()
 
-    # Trigger asynchronous background processing pipeline
-    background_tasks.add_task(run_project_pipeline, project.id)
+    # Persist the source privately in S3; EFS remains the shared processing workspace.
+    if s3_enabled():
+        try:
+            await run_in_threadpool(s3_upload, str(target_file), f"users/{user.id}/projects/{project.id}/source{ext}", "video/mp4" if ext == ".mp4" else None)
+        except Exception:
+            logger.exception("Could not persist source video to S3")
+            raise HTTPException(status_code=503, detail="Secure media storage is temporarily unavailable.")
+
+    # SQS is used in AWS; local BackgroundTasks are retained for development.
+    if not enqueue_project(project.id):
+        background_tasks.add_task(run_project_pipeline, project.id)
 
     resp = ProjectResponse.model_validate(project)
     resp.clip_count = 0
@@ -126,6 +170,7 @@ async def upload_video_project(
 async def import_youtube_project(
     background_tasks: BackgroundTasks,
     payload: ProjectCreateURL,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -134,8 +179,16 @@ async def import_youtube_project(
     guides the user to upload the original video file.
     """
     url = payload.youtube_url.strip()
-    if not ("youtube.com" in url or "youtu.be" in url):
-        raise HTTPException(status_code=400, detail="Invalid YouTube URL format.")
+    parsed_url = urlsplit(url)
+    allowed_hosts = {"youtube.com", "www.youtube.com", "m.youtube.com", "music.youtube.com", "youtu.be"}
+    if (
+        parsed_url.scheme != "https"
+        or parsed_url.hostname not in allowed_hosts
+        or parsed_url.username is not None
+        or parsed_url.password is not None
+        or parsed_url.port not in (None, 443)
+    ):
+        raise HTTPException(status_code=400, detail="Only valid HTTPS YouTube video URLs are supported.")
 
     # 1. Inspect YouTube URL using authorized oEmbed / metadata inspection
     import urllib.request
@@ -153,7 +206,7 @@ async def import_youtube_project(
 
     # 2. Check if authorized media stream is accessible via yt-dlp
     import subprocess
-    target_file = UPLOAD_DIR / f"yt_import_{payload.project_name[:20].replace(' ', '_')}.mp4"
+    target_file = UPLOAD_DIR / f"yt_import_{uuid.uuid4().hex}.mp4"
     
     cmd = [
         "yt-dlp",
@@ -189,6 +242,7 @@ async def import_youtube_project(
         project_name=video_title or payload.project_name,
         source_type="youtube",
         source_reference=str(target_file),
+        user_id=user.id,
         source_title=video_title,
         target_clip_count=payload.target_clip_count or 5,
         duration_preference=payload.duration_preference or "30-60",
@@ -201,20 +255,31 @@ async def import_youtube_project(
     db.commit()
     db.refresh(project)
 
-    # Launch Pipeline
-    background_tasks.add_task(run_project_pipeline, project.id)
+    if s3_enabled():
+        try:
+            await run_in_threadpool(s3_upload, str(target_file), f"users/{user.id}/projects/{project.id}/source.mp4", "video/mp4")
+        except Exception:
+            logger.exception("Could not persist imported video to S3")
+            raise HTTPException(status_code=503, detail="Secure media storage is temporarily unavailable.")
+    if not enqueue_project(project.id):
+        background_tasks.add_task(run_project_pipeline, project.id)
 
     resp = ProjectResponse.model_validate(project)
     resp.clip_count = 0
     return resp
 
 @router.delete("/projects/{project_id}")
-def delete_project(project_id: str, db: Session = Depends(get_db)):
+def delete_project(project_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Delete a project and remove associated files."""
-    project = db.query(Project).filter(Project.id == project_id).first()
+    project = db.query(Project).filter(Project.id == project_id, Project.user_id == user.id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
+    # Remove private S3 objects as well as local EFS artifacts.
+    try:
+        s3_delete_prefix(f"users/{user.id}/projects/{project.id}/")
+    except Exception:
+        logger.exception("Could not delete S3 objects for project %s", project_id)
     # Clean up files
     try:
         if project.source_reference and Path(project.source_reference).exists():

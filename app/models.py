@@ -14,7 +14,8 @@ class User(Base):
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
     name = Column(String(120), nullable=False)
-    email = Column(String(255), unique=True, nullable=False)
+    email = Column(String(255), unique=True, nullable=False, index=True)
+    password_hash = Column(String(512), nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.now(timezone.utc))
 
     projects = relationship("Project", back_populates="user", cascade="all, delete-orphan")
@@ -24,7 +25,7 @@ class Project(Base):
     __tablename__ = "projects"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     project_name = Column(String(255), nullable=False)
     source_type = Column(String(50), default="upload")  # "upload" or "youtube"
     source_reference = Column(Text, nullable=False)     # File path or YouTube URL
