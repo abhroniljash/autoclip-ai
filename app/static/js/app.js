@@ -66,7 +66,7 @@ async function renderRoute() {
     const hash = state.currentRoute;
     updateAuthControls();
     const protectedRoute = hash.startsWith("#/dashboard") || hash.startsWith("#/projects/");
-    if (protectedRoute && !sessionStorage.getItem("autoclip_access_token")) { navigate("#/login"); return; }
+    if (protectedRoute && !sessionStorage.getItem("autoclip_authenticated")) { navigate("#/login"); return; }
 
     // Update active nav links
     document.querySelectorAll(".nav-link").forEach(link => {
