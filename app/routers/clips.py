@@ -5,6 +5,8 @@ from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.auth import get_current_user
+from app.models import User
 from app.models import Clip, Project
 from app.schemas import ClipResponse, ClipUpdate
 from app.config import CLIPS_DIR, SUBTITLES_DIR, BGM_DIR, SUBTITLE_PRESETS
@@ -31,15 +33,15 @@ def list_subtitle_presets():
     return SUBTITLE_PRESETS
 
 @router.get("/{clip_id}", response_model=ClipResponse)
-def get_clip(clip_id: str, db: Session = Depends(get_db)):
+def get_clip(clip_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Fetch clip details by ID."""
-    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    clip = db.query(Clip).join(Project).filter(Clip.id == clip_id, Project.user_id == user.id).first()
     if not clip:
         raise HTTPException(status_code=404, detail="Clip not found")
     return ClipResponse.model_validate(clip)
 
 @router.patch("/{clip_id}", response_model=ClipResponse)
-def update_clip_settings(clip_id: str, payload: ClipUpdate, db: Session = Depends(get_db)):
+def update_clip_settings(clip_id: str, payload: ClipUpdate, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Update clip parameters (trim start/end, crop mode, subtitle style, audio settings)."""
     clip = db.query(Clip).filter(Clip.id == clip_id).first()
     if not clip:
@@ -58,7 +60,7 @@ def update_clip_settings(clip_id: str, payload: ClipUpdate, db: Session = Depend
     return ClipResponse.model_validate(clip)
 
 @router.post("/{clip_id}/render", response_model=ClipResponse)
-def trigger_clip_re_render(clip_id: str, db: Session = Depends(get_db)):
+def trigger_clip_re_render(clip_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """
     Re-renders the vertical 9:16 clip using FFmpeg with latest trim, crop,
     subtitle style, and audio normalization settings.
