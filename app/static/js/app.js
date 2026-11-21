@@ -37,12 +37,12 @@ function initTheme() {
         updateAuthControls();
     });
     updateAuthControls();
+}
 
 function updateAuthControls() {
     const signedIn = Boolean(sessionStorage.getItem("autoclip_access_token"));
     document.getElementById("sign-in-link")?.classList.toggle("hidden", signedIn);
     document.getElementById("sign-out-button")?.classList.toggle("hidden", !signedIn);
-}
 }
 
 // Router
