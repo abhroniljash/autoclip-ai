@@ -9,7 +9,7 @@ SQS_QUEUE_URL = os.environ.get("SQS_QUEUE_URL", "").strip()
 _client = None
 
 
-def enqueue_project(project_id: str) -> bool:
+def _send(payload: dict) -> bool:
     """Publish a project job. Returns False when local dev queue mode is disabled."""
     if not SQS_QUEUE_URL:
         return False
@@ -18,6 +18,14 @@ def enqueue_project(project_id: str) -> bool:
         _client = boto3.client("sqs", region_name=AWS_REGION)
     _client.send_message(
         QueueUrl=SQS_QUEUE_URL,
-        MessageBody=json.dumps({"type": "process_project", "project_id": project_id}),
+        MessageBody=json.dumps(payload),
     )
     return True
+
+
+def enqueue_project(project_id: str) -> bool:
+    return _send({"type": "process_project", "project_id": project_id})
+
+
+def enqueue_export(export_job_id: str) -> bool:
+    return _send({"type": "process_export", "export_job_id": export_job_id})
