@@ -89,7 +89,7 @@ def trigger_clip_re_render(clip_id: str, user: User = Depends(get_current_user),
     Re-renders the vertical 9:16 clip using FFmpeg with latest trim, crop,
     subtitle style, and audio normalization settings.
     """
-    clip = db.query(Clip).filter(Clip.id == clip_id).first()
+    clip = db.query(Clip).join(Project).filter(Clip.id == clip_id, Project.user_id == user.id).first()
     if not clip:
         raise HTTPException(status_code=404, detail="Clip not found")
         
