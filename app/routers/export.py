@@ -60,12 +60,13 @@ def get_export_job_status(job_id: str, user: User = Depends(get_current_user), d
 def download_export_zip(job_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Download consolidated ZIP archive containing clips, subtitles, and metadata."""
     job = db.query(ExportJob).join(Project).filter(ExportJob.id == job_id, Project.user_id == user.id).first()
-    if not job or not job.zip_path or not Path(job.zip_path).exists():
+    if not job or not job.zip_path:
         raise HTTPException(status_code=404, detail="Export ZIP archive is not ready or missing.")
-
     if job.zip_path.startswith("s3://"):
         from app.services.aws_storage import presigned_url
         return RedirectResponse(presigned_url(job.zip_path), status_code=307)
+    if not Path(job.zip_path).exists():
+        raise HTTPException(status_code=404, detail="Export ZIP archive is not ready or missing.")
     filename = Path(job.zip_path).name
     return FileResponse(
         path=job.zip_path,
@@ -77,13 +78,15 @@ def download_export_zip(job_id: str, user: User = Depends(get_current_user), db:
 def download_single_clip(clip_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Download single rendered 9:16 vertical video clip."""
     clip = db.query(Clip).join(Project).filter(Clip.id == clip_id, Project.user_id == user.id).first()
-    if not clip or not clip.output_file_path or not Path(clip.output_file_path).exists():
+    if not clip or not clip.output_file_path:
         raise HTTPException(status_code=404, detail="Rendered clip not found. Please render the clip first.")
 
     safe_title = "".join(c for c in clip.title if c.isalnum() or c in (" ", "-", "_")).strip()
     if clip.output_file_path.startswith("s3://"):
         from app.services.aws_storage import presigned_url
         return RedirectResponse(presigned_url(clip.output_file_path), status_code=307)
+    if not Path(clip.output_file_path).exists():
+        raise HTTPException(status_code=404, detail="Rendered clip not found. Please render the clip first.")
     return FileResponse(
         path=clip.output_file_path,
         media_type="video/mp4",
