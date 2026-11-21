@@ -32,6 +32,17 @@ async def run_project_pipeline(project_id: str):
             logger.error("Pipeline failed: Project %s not found in DB", project_id)
             return
 
+        if project.processing_status == "failed":
+            logger.info("Resetting partial artifacts before retry for Project %s", project_id)
+            for old_clip in list(project.clips):
+                for old_path in (old_clip.output_file_path, old_clip.thumbnail_path, old_clip.subtitle_file_path):
+                    if old_path and not old_path.startswith("s3://") and Path(old_path).is_file():
+                        Path(old_path).unlink(missing_ok=True)
+                db.delete(old_clip)
+            if project.analysis is not None:
+                db.delete(project.analysis)
+            db.commit()
+
         logger.info("Starting processing pipeline for Project %s ('%s')", project_id, project.project_name)
         
         # Step 1: Probe Video
