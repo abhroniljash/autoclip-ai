@@ -12,12 +12,18 @@ depends_on = None
 
 
 def upgrade():
-    with op.batch_alter_table("users") as batch:
-        batch.add_column(sa.Column("password_hash", sa.String(length=512), nullable=True))
-    # Existing projects remain unowned until an administrator explicitly assigns them.
-    # New projects are always created with the authenticated user's ID.
+    inspector = sa.inspect(op.get_bind())
+    if "users" in inspector.get_table_names():
+        columns = {column["name"] for column in inspector.get_columns("users")}
+        if "password_hash" not in columns:
+            with op.batch_alter_table("users") as batch:
+                batch.add_column(sa.Column("password_hash", sa.String(length=512), nullable=True))
 
 
 def downgrade():
-    with op.batch_alter_table("users") as batch:
-        batch.drop_column("password_hash")
+    inspector = sa.inspect(op.get_bind())
+    if "users" in inspector.get_table_names():
+        columns = {column["name"] for column in inspector.get_columns("users")}
+        if "password_hash" in columns:
+            with op.batch_alter_table("users") as batch:
+                batch.drop_column("password_hash")
