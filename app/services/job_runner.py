@@ -16,7 +16,7 @@ def run_export_job(export_job_id: str) -> None:
         path = build_project_zip_archive(db, export_job_id)
         job = db.query(ExportJob).filter(ExportJob.id == export_job_id).first()
         if job and s3_enabled() and Path(path).is_file():
-            job.zip_path = s3_upload(path, f"users/{job.project.user_id}/exports/{job.id}.zip", "application/zip")
+            job.zip_path = s3_upload(path, f"users/{job.project.user_id}/projects/{job.project_id}/exports/{job.id}.zip", "application/zip")
             db.commit()
     except Exception as exc:
         logger.exception("Export job %s failed", export_job_id)
