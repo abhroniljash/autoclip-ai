@@ -2,7 +2,7 @@ import os
 import logging
 from pathlib import Path
 from fastapi import APIRouter, Depends, HTTPException, BackgroundTasks
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, RedirectResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -76,6 +76,9 @@ def download_single_clip(clip_id: str, user: User = Depends(get_current_user), d
         raise HTTPException(status_code=404, detail="Rendered clip not found. Please render the clip first.")
 
     safe_title = "".join(c for c in clip.title if c.isalnum() or c in (" ", "-", "_")).strip()
+    if clip.output_file_path.startswith("s3://"):
+        from app.services.aws_storage import presigned_url
+        return RedirectResponse(presigned_url(clip.output_file_path), status_code=307)
     return FileResponse(
         path=clip.output_file_path,
         media_type="video/mp4",
