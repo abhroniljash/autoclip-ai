@@ -40,24 +40,30 @@ def persist_project_media(project_id: str) -> None:
         if not project or project.processing_status != "completed":
             return
         prefix = f"users/{project.user_id}/projects/{project.id}"
+        cleanup_paths = []
         if project.thumbnail_path and os.path.isfile(project.thumbnail_path):
             local_thumbnail = project.thumbnail_path
             project.thumbnail_path = upload_file(local_thumbnail, f"{prefix}/project-thumbnail.jpg", "image/jpeg")
-            os.remove(local_thumbnail)
+            cleanup_paths.append(local_thumbnail)
         for clip in db.query(Clip).filter(Clip.project_id == project.id).all():
             if clip.output_file_path and os.path.isfile(clip.output_file_path):
                 local_output = clip.output_file_path
                 clip.output_file_path = upload_file(local_output, f"{prefix}/clips/{clip.id}.mp4", "video/mp4")
-                os.remove(local_output)
+                cleanup_paths.append(local_output)
             if clip.thumbnail_path and os.path.isfile(clip.thumbnail_path):
                 local_thumbnail = clip.thumbnail_path
                 clip.thumbnail_path = upload_file(local_thumbnail, f"{prefix}/clips/{clip.id}-thumbnail.jpg", "image/jpeg")
-                os.remove(local_thumbnail)
+                cleanup_paths.append(local_thumbnail)
             if clip.subtitle_file_path and os.path.isfile(clip.subtitle_file_path):
                 local_subtitle = clip.subtitle_file_path
                 clip.subtitle_file_path = upload_file(local_subtitle, f"{prefix}/clips/{clip.id}.ass", "text/plain")
-                os.remove(local_subtitle)
+                cleanup_paths.append(local_subtitle)
         db.commit()
+        for local_path in cleanup_paths:
+            try:
+                os.remove(local_path)
+            except FileNotFoundError:
+                pass
     finally:
         db.close()
 
@@ -99,14 +105,23 @@ def main():
                 payload = json.loads(message["Body"])
                 if payload.get("type") == "process_project":
                     project_id = str(payload["project_id"])
-                    asyncio.run(run_project_pipeline(project_id))
                     check_db = SessionLocal()
                     try:
-                        completed = check_db.query(Project).filter(Project.id == project_id, Project.processing_status == "completed").first()
-                        if not completed:
-                            raise RuntimeError("Video pipeline did not reach completed state.")
+                        project = check_db.query(Project).filter(Project.id == project_id).first()
+                        if not project:
+                            raise RuntimeError("Project does not exist.")
+                        already_completed = project.processing_status == "completed"
                     finally:
                         check_db.close()
+                    if not already_completed:
+                        asyncio.run(run_project_pipeline(project_id))
+                        check_db = SessionLocal()
+                        try:
+                            completed = check_db.query(Project).filter(Project.id == project_id, Project.processing_status == "completed").first()
+                            if not completed:
+                                raise RuntimeError("Video pipeline did not reach completed state.")
+                        finally:
+                            check_db.close()
                     persist_project_media(project_id)
                 elif payload.get("type") == "process_export":
                     run_export_job(str(payload["export_job_id"]))
