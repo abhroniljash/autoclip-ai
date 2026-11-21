@@ -7,6 +7,7 @@ import logging
 import os
 import signal
 import time
+import threading
 
 import boto3
 from sqlalchemy.orm import Session
@@ -53,6 +54,16 @@ def persist_project_media(project_id: str) -> None:
         db.close()
 
 
+def visibility_heartbeat(sqs, receipt_handle: str, stop_event: threading.Event) -> None:
+    while not stop_event.wait(240):
+        try:
+            sqs.change_message_visibility(
+                QueueUrl=QUEUE_URL, ReceiptHandle=receipt_handle, VisibilityTimeout=900
+            )
+        except Exception:
+            logger.exception("Could not extend SQS job visibility timeout")
+            return
+
 def main():
     if not QUEUE_URL:
         raise RuntimeError("SQS_QUEUE_URL must be configured for the worker.")
@@ -69,6 +80,13 @@ def main():
             VisibilityTimeout=int(os.environ.get("SQS_VISIBILITY_TIMEOUT", "900")),
         )
         for message in response.get("Messages", []):
+            stop_heartbeat = threading.Event()
+            heartbeat = threading.Thread(
+                target=visibility_heartbeat,
+                args=(sqs, message["ReceiptHandle"], stop_heartbeat),
+                daemon=True,
+            )
+            heartbeat.start()
             try:
                 payload = json.loads(message["Body"])
                 if payload.get("type") == "process_project":
@@ -83,6 +101,9 @@ def main():
             except Exception:
                 logger.exception("Project job failed; leaving message for SQS retry/DLQ")
                 time.sleep(2)
+            finally:
+                stop_heartbeat.set()
+                heartbeat.join(timeout=2)
 
 
 if __name__ == "__main__":
