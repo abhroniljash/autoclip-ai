@@ -13,7 +13,7 @@ from app.database import init_db
 from app.config import (
     BASE_DIR, STORAGE_DIR, STATIC_DIR, BGM_DIR, FFMPEG_PATH, FFPROBE_PATH
 )
-from app.routers import projects, clips, export
+from app.routers import projects, clips, export, auth
 
 # Configure Logging
 logging.basicConfig(
@@ -81,13 +81,11 @@ app.add_middleware(
     allow_headers=["Content-Type", "Authorization"],
 )
 
-# Mount Storage for streaming video/audio and thumbnails
-app.mount("/storage", StaticFiles(directory=str(STORAGE_DIR)), name="storage")
-
 # Include Routers
 app.include_router(projects.router)
 app.include_router(clips.router)
 app.include_router(export.router)
+app.include_router(auth.router)
 
 # Mount Static Files
 app.mount("/static", StaticFiles(directory=str(STATIC_DIR)), name="static")
@@ -122,7 +120,7 @@ def shutil_which_exists(name):
 @app.get("/{full_path:path}")
 async def serve_frontend(full_path: str, request: Request):
     # Exclude API endpoints
-    if full_path.startswith("api/") or full_path.startswith("storage/") or full_path.startswith("static/"):
+    if full_path.startswith("api/") or full_path.startswith("static/"):
         return JSONResponse(status_code=404, content={"detail": "Not Found"})
         
     index_file = STATIC_DIR / "index.html"
