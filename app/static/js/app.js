@@ -31,6 +31,18 @@ function initTheme() {
         }
         if (window.lucide) window.lucide.createIcons();
     });
+    document.getElementById("sign-out-button")?.addEventListener("click", async () => {
+        await api.logout();
+        navigate("#/");
+        updateAuthControls();
+    });
+    updateAuthControls();
+
+function updateAuthControls() {
+    const signedIn = Boolean(sessionStorage.getItem("autoclip_access_token"));
+    document.getElementById("sign-in-link")?.classList.toggle("hidden", signedIn);
+    document.getElementById("sign-out-button")?.classList.toggle("hidden", !signedIn);
+}
 }
 
 // Router
@@ -52,6 +64,7 @@ async function renderRoute() {
 
     const root = document.getElementById("app-root");
     const hash = state.currentRoute;
+    updateAuthControls();
     const protectedRoute = hash.startsWith("#/dashboard") || hash.startsWith("#/projects/");
     if (protectedRoute && !sessionStorage.getItem("autoclip_access_token")) { navigate("#/login"); return; }
 
