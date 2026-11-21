@@ -52,6 +52,8 @@ async function renderRoute() {
 
     const root = document.getElementById("app-root");
     const hash = state.currentRoute;
+    const protectedRoute = hash.startsWith("#/dashboard") || hash.startsWith("#/projects/");
+    if (protectedRoute && !sessionStorage.getItem("autoclip_access_token")) { navigate("#/login"); return; }
 
     // Update active nav links
     document.querySelectorAll(".nav-link").forEach(link => {
@@ -64,7 +66,9 @@ async function renderRoute() {
     });
 
     try {
-        if (hash === "#/" || hash === "") {
+        if (hash === "#/login" || hash === "#/register") {
+            renderAuthPage(root, hash === "#/register");
+        } else if (hash === "#/" || hash === "") {
             renderLandingPage(root);
         } else if (hash === "#/dashboard") {
             await renderDashboardPage(root);
@@ -96,6 +100,30 @@ async function renderRoute() {
     if (window.lucide) window.lucide.createIcons();
 }
 
+/* =========================================================================
+   AUTHENTICATION
+========================================================================= */
+function renderAuthPage(container, register = false) {
+    container.innerHTML = '<div class="max-w-md mx-auto my-12 p-8 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm">' +
+        '<h1 class="text-2xl font-bold mb-2">' + (register ? "Create your AutoClip AI account" : "Welcome back") + '</h1>' +
+        '<p class="text-sm text-slate-500 mb-6">' + (register ? "Create an account to manage your clips." : "Sign in to access your projects.") + '</p>' +
+        '<form id="auth-form" class="space-y-4">' +
+        (register ? '<label class="block text-sm">Name<input name="name" required maxlength="120" class="mt-1 w-full rounded-lg border p-3 dark:bg-slate-800"></label>' : "") +
+        '<label class="block text-sm">Email<input name="email" type="email" required autocomplete="email" class="mt-1 w-full rounded-lg border p-3 dark:bg-slate-800"></label>' +
+        '<label class="block text-sm">Password<input name="password" type="password" required minlength="' + (register ? "12" : "1") + '" autocomplete="' + (register ? "new-password" : "current-password") + '" class="mt-1 w-full rounded-lg border p-3 dark:bg-slate-800"></label>' +
+        '<p id="auth-error" class="text-sm text-red-600" role="alert"></p><button class="w-full rounded-lg bg-brand-600 text-white font-semibold p-3" type="submit">' + (register ? "Create account" : "Sign in") + '</button></form>' +
+        '<p class="text-sm text-center mt-5 text-slate-500">' + (register ? 'Already registered? <a href="#/login" class="text-brand-600 underline">Sign in</a>' : 'New here? <a href="#/register" class="text-brand-600 underline">Create an account</a>') + '</p></div>';
+    container.querySelector("#auth-form").addEventListener("submit", async (event) => {
+        event.preventDefault();
+        const data = Object.fromEntries(new FormData(event.currentTarget).entries());
+        const error = container.querySelector("#auth-error");
+        error.textContent = "";
+        try {
+            if (register) await api.register(data); else await api.login(data);
+            navigate("#/dashboard");
+        } catch (err) { error.textContent = err.message || "Unable to authenticate."; }
+    });
+}
 /* =========================================================================
    PAGE 1: LANDING PAGE
 ========================================================================= */
