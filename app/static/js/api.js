@@ -1,15 +1,14 @@
 // AutoClip AI - Frontend API Client
 
 const API_BASE = "/api";
-const token = () => sessionStorage.getItem("autoclip_access_token");
-const authHeaders = (extra = {}) => ({ ...extra, ...(token() ? { Authorization: "Bearer " + token() } : {}) });
+const authHeaders = (extra = {}) => ({ ...extra });
 
 export const api = {
     async register(data) {
         const res = await fetch(API_BASE + "/auth/register", { method: "POST", headers: authHeaders({ "Content-Type": "application/json" }), body: JSON.stringify(data) });
         const body = await res.json().catch(() => ({}));
         if (!res.ok) throw new Error(body.detail || "Registration failed");
-        sessionStorage.setItem("autoclip_access_token", body.access_token);
+        sessionStorage.setItem("autoclip_authenticated", "1");
         return body.user;
     },
     async login(data) {
@@ -23,7 +22,7 @@ export const api = {
         try {
             await fetch(API_BASE + "/auth/logout", { method: "POST", headers: authHeaders() });
         } finally {
-            sessionStorage.removeItem("autoclip_access_token");
+            sessionStorage.removeItem("autoclip_authenticated");
         }
     },
     async getDashboardStats() {
@@ -48,7 +47,6 @@ export const api = {
         return new Promise((resolve, reject) => {
             const xhr = new XMLHttpRequest();
             xhr.open("POST", `${API_BASE}/projects/upload`);
-            if (token()) xhr.setRequestHeader("Authorization", "Bearer " + token());
 
             if (xhr.upload && onProgress) {
                 xhr.upload.onprogress = (e) => {
