@@ -6,6 +6,7 @@ from urllib.parse import urlsplit
 import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
+from fastapi.responses import FileResponse
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -66,6 +67,12 @@ def get_project_detail(project_id: str, user: User = Depends(get_current_user), 
     resp.clip_count = len(project.clips)
     return resp
 
+@router.get("/projects/{project_id}/thumbnail")
+def get_project_thumbnail(project_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
+    project = db.query(Project).filter(Project.id == project_id, Project.user_id == user.id).first()
+    if not project or not project.thumbnail_path or not Path(project.thumbnail_path).is_file():
+        raise HTTPException(status_code=404, detail="Project thumbnail not found.")
+    return FileResponse(project.thumbnail_path, media_type="image/jpeg")
 @router.post("/projects/upload", response_model=ProjectResponse)
 async def upload_video_project(
     background_tasks: BackgroundTasks,
