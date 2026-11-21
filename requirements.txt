@@ -36,3 +36,6 @@ yt-dlp>=2024.10.0
 #
 # Local High-Performance Speech Recognition:
 # faster-whisper>=1.0.0
+
+# PostgreSQL driver for AWS RDS and container deployments
+psycopg[binary]>=3.2,<4
