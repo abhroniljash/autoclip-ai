@@ -41,14 +41,22 @@ def persist_project_media(project_id: str) -> None:
             return
         prefix = f"users/{project.user_id}/projects/{project.id}"
         if project.thumbnail_path and os.path.isfile(project.thumbnail_path):
-            project.thumbnail_path = upload_file(project.thumbnail_path, f"{prefix}/project-thumbnail.jpg", "image/jpeg")
+            local_thumbnail = project.thumbnail_path
+            project.thumbnail_path = upload_file(local_thumbnail, f"{prefix}/project-thumbnail.jpg", "image/jpeg")
+            os.remove(local_thumbnail)
         for clip in db.query(Clip).filter(Clip.project_id == project.id).all():
             if clip.output_file_path and os.path.isfile(clip.output_file_path):
-                clip.output_file_path = upload_file(clip.output_file_path, f"{prefix}/clips/{clip.id}.mp4", "video/mp4")
+                local_output = clip.output_file_path
+                clip.output_file_path = upload_file(local_output, f"{prefix}/clips/{clip.id}.mp4", "video/mp4")
+                os.remove(local_output)
             if clip.thumbnail_path and os.path.isfile(clip.thumbnail_path):
-                clip.thumbnail_path = upload_file(clip.thumbnail_path, f"{prefix}/clips/{clip.id}-thumbnail.jpg", "image/jpeg")
+                local_thumbnail = clip.thumbnail_path
+                clip.thumbnail_path = upload_file(local_thumbnail, f"{prefix}/clips/{clip.id}-thumbnail.jpg", "image/jpeg")
+                os.remove(local_thumbnail)
             if clip.subtitle_file_path and os.path.isfile(clip.subtitle_file_path):
-                clip.subtitle_file_path = upload_file(clip.subtitle_file_path, f"{prefix}/clips/{clip.id}.ass", "text/plain")
+                local_subtitle = clip.subtitle_file_path
+                clip.subtitle_file_path = upload_file(local_subtitle, f"{prefix}/clips/{clip.id}.ass", "text/plain")
+                os.remove(local_subtitle)
         db.commit()
     finally:
         db.close()
