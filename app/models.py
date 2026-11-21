@@ -25,7 +25,7 @@ class Project(Base):
     __tablename__ = "projects"
 
     id = Column(String(36), primary_key=True, default=generate_uuid)
-    user_id = Column(String(36), ForeignKey("users.id"), nullable=False, index=True)
+    user_id = Column(String(36), ForeignKey("users.id"), nullable=True, index=True)
     project_name = Column(String(255), nullable=False)
     source_type = Column(String(50), default="upload")  # "upload" or "youtube"
     source_reference = Column(Text, nullable=False)     # File path or YouTube URL
