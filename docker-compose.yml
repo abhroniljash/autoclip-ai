@@ -18,6 +18,8 @@ services:
     build: .
     environment:
       DATABASE_URL: postgresql+psycopg://autoclip:${POSTGRES_PASSWORD}@db:5432/autoclip
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       OPENAI_API_KEY: ${OPENAI_API_KEY:-}
       MAX_UPLOAD_SIZE_MB: ${MAX_UPLOAD_SIZE_MB:-1000}
@@ -47,6 +49,8 @@ services:
       AWS_REGION: ${AWS_REGION:-ap-south-1}
       S3_BUCKET: ${S3_BUCKET:?Set S3_BUCKET to a private bucket}
       SQS_QUEUE_URL: ${SQS_QUEUE_URL:?Set SQS_QUEUE_URL}
+      JWT_SECRET: ${JWT_SECRET:?Set JWT_SECRET}
+      COOKIE_SECURE: ${COOKIE_SECURE:-false}
     volumes:
       - autoclip_storage:/app/storage
     depends_on:
