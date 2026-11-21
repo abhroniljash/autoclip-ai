@@ -59,3 +59,12 @@ def delete_prefix(prefix: str) -> None:
         objects = [{"Key": item["Key"]} for item in page.get("Contents", [])]
         if objects:
             s3_client().delete_objects(Bucket=S3_BUCKET, Delete={"Objects": objects})
+
+def download_file(uri: str, destination: str) -> str:
+    parsed = parse_uri(uri)
+    if not parsed:
+        raise ValueError("Not an S3 object URI.")
+    bucket, key = parsed
+    os.makedirs(os.path.dirname(destination), exist_ok=True)
+    s3_client().download_file(bucket, key, destination)
+    return destination
