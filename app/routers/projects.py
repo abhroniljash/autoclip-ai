@@ -7,6 +7,7 @@ import uuid
 from typing import List, Optional
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, BackgroundTasks
 from fastapi.responses import FileResponse
+from starlette.concurrency import run_in_threadpool
 from sqlalchemy.orm import Session
 
 from app.database import get_db
@@ -152,7 +153,7 @@ async def upload_video_project(
     # Persist the source privately in S3; EFS remains the shared processing workspace.
     if s3_enabled():
         try:
-            s3_upload(str(target_file), f"users/{user.id}/projects/{project.id}/source{ext}", "video/mp4" if ext == ".mp4" else None)
+            await run_in_threadpool(s3_upload, str(target_file), f"users/{user.id}/projects/{project.id}/source{ext}", "video/mp4" if ext == ".mp4" else None)
         except Exception:
             logger.exception("Could not persist source video to S3")
             raise HTTPException(status_code=503, detail="Secure media storage is temporarily unavailable.")
@@ -256,7 +257,7 @@ async def import_youtube_project(
 
     if s3_enabled():
         try:
-            s3_upload(str(target_file), f"users/{user.id}/projects/{project.id}/source.mp4", "video/mp4")
+            await run_in_threadpool(s3_upload, str(target_file), f"users/{user.id}/projects/{project.id}/source.mp4", "video/mp4")
         except Exception:
             logger.exception("Could not persist imported video to S3")
             raise HTTPException(status_code=503, detail="Secure media storage is temporarily unavailable.")
