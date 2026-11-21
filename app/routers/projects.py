@@ -9,6 +9,8 @@ from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form, B
 from sqlalchemy.orm import Session
 
 from app.database import get_db
+from app.auth import get_current_user
+from app.models import User
 from app.models import Project, Clip, VideoAnalysis
 from app.schemas import (
     ProjectResponse, ProjectDetailResponse, ProjectCreateURL, DashboardStatsResponse
@@ -20,13 +22,13 @@ router = APIRouter(prefix="/api", tags=["Projects"])
 logger = logging.getLogger("autoclip.projects")
 
 @router.get("/dashboard/stats", response_model=DashboardStatsResponse)
-def get_dashboard_stats(db: Session = Depends(get_db)):
+def get_dashboard_stats(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Fetch dashboard statistics and recent projects."""
-    total_projects = db.query(Project).count()
-    completed_projects = db.query(Project).filter(Project.processing_status == "completed").count()
-    total_clips = db.query(Clip).count()
+    total_projects = db.query(Project).filter(Project.user_id == user.id).count()
+    completed_projects = db.query(Project).filter(Project.user_id == user.id, Project.processing_status == "completed").count()
+    total_clips = db.query(Clip).join(Project).filter(Project.user_id == user.id).count()
     
-    recent = db.query(Project).order_by(Project.created_at.desc()).limit(8).all()
+    recent = db.query(Project).filter(Project.user_id == user.id).order_by(Project.created_at.desc()).limit(8).all()
     
     # Calculate clip counts
     recent_responses = []
@@ -43,9 +45,9 @@ def get_dashboard_stats(db: Session = Depends(get_db)):
     }
 
 @router.get("/projects", response_model=List[ProjectResponse])
-def list_projects(db: Session = Depends(get_db)):
+def list_projects(user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """List all projects ordered by newest first."""
-    projects = db.query(Project).order_by(Project.created_at.desc()).all()
+    projects = db.query(Project).filter(Project.user_id == user.id).order_by(Project.created_at.desc()).all()
     results = []
     for p in projects:
         resp = ProjectResponse.model_validate(p)
@@ -54,9 +56,9 @@ def list_projects(db: Session = Depends(get_db)):
     return results
 
 @router.get("/projects/{project_id}", response_model=ProjectDetailResponse)
-def get_project_detail(project_id: str, db: Session = Depends(get_db)):
+def get_project_detail(project_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Fetch complete project details including AI analysis results and clips."""
-    project = db.query(Project).filter(Project.id == project_id).first()
+    project = db.query(Project).filter(Project.id == project_id, Project.user_id == user.id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
         
@@ -73,6 +75,7 @@ async def upload_video_project(
     duration_preference: str = Form("30-60"),
     language: str = Form("en"),
     default_style: str = Form("bold_viral"),
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -101,6 +104,7 @@ async def upload_video_project(
         project_name=p_name,
         source_type="upload",
         source_reference="",
+        user_id=user.id,
         target_clip_count=target_clip_count,
         duration_preference=duration_preference,
         language=language,
@@ -141,6 +145,7 @@ async def upload_video_project(
 async def import_youtube_project(
     background_tasks: BackgroundTasks,
     payload: ProjectCreateURL,
+    user: User = Depends(get_current_user),
     db: Session = Depends(get_db)
 ):
     """
@@ -212,6 +217,7 @@ async def import_youtube_project(
         project_name=video_title or payload.project_name,
         source_type="youtube",
         source_reference=str(target_file),
+        user_id=user.id,
         source_title=video_title,
         target_clip_count=payload.target_clip_count or 5,
         duration_preference=payload.duration_preference or "30-60",
@@ -232,9 +238,9 @@ async def import_youtube_project(
     return resp
 
 @router.delete("/projects/{project_id}")
-def delete_project(project_id: str, db: Session = Depends(get_db)):
+def delete_project(project_id: str, user: User = Depends(get_current_user), db: Session = Depends(get_db)):
     """Delete a project and remove associated files."""
-    project = db.query(Project).filter(Project.id == project_id).first()
+    project = db.query(Project).filter(Project.id == project_id, Project.user_id == user.id).first()
     if not project:
         raise HTTPException(status_code=404, detail="Project not found")
 
