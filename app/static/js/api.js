@@ -78,7 +78,7 @@ export const api = {
     async importYouTube(data) {
         const res = await fetch(`${API_BASE}/projects/youtube`, {
             method: "POST",
-            headers: { "Content-Type": "application/json" },
+            headers: authHeaders({ "Content-Type": "application/json" }),
             body: JSON.stringify(data)
         });
         if (!res.ok) {
