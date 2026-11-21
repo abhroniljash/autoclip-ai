@@ -10,7 +10,8 @@ from app.auth import get_current_user
 from app.models import User
 from app.models import Project, Clip, ExportJob
 from app.schemas import ExportRequest, ExportJobResponse
-from app.services.export_service import build_project_zip_archive
+from app.services.job_runner import run_export_job
+from app.services.aws_queue import enqueue_export
 from app.services.subtitle_service import generate_srt_subtitles
 from app.config import SUBTITLES_DIR
 
@@ -42,8 +43,9 @@ def create_export_job(
     db.commit()
     db.refresh(job)
 
-    # Launch ZIP creation in background
-    background_tasks.add_task(build_project_zip_archive, db, job.id)
+    # AWS uses durable SQS workers; local development uses an isolated DB session.
+    if not enqueue_export(job.id):
+        background_tasks.add_task(run_export_job, job.id)
     return ExportJobResponse.model_validate(job)
 
 @router.get("/export/{job_id}/status", response_model=ExportJobResponse)
@@ -61,6 +63,9 @@ def download_export_zip(job_id: str, user: User = Depends(get_current_user), db:
     if not job or not job.zip_path or not Path(job.zip_path).exists():
         raise HTTPException(status_code=404, detail="Export ZIP archive is not ready or missing.")
 
+    if job.zip_path.startswith("s3://"):
+        from app.services.aws_storage import presigned_url
+        return RedirectResponse(presigned_url(job.zip_path), status_code=307)
     filename = Path(job.zip_path).name
     return FileResponse(
         path=job.zip_path,
